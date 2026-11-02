@@ -285,6 +285,7 @@ jobs:
           python -m unittest discover -s port/tools/hostgen -v
           # This job installs both Clang and ccache, so the real cache fixture runs here.
           python -m unittest discover -s tools -p test_ci_cache.py -v
+          python -m unittest discover -s tools -p test_hostgen_cache.py -v
 
       - name: Build
         working-directory: port
@@ -384,6 +385,7 @@ jobs:
         with:
           variant: ubuntu-enhanced-baker
           preset: enhanced
+          hostgen: "false"
 
       - name: Build enhanced lighting and baker
         working-directory: port
