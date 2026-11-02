@@ -55,7 +55,13 @@ keeps dependency sources, fingerprint-checked hostgen output and CMake's configu
 metadata. Its keys include the tools, installed packages, runner image, workspace, CPU features
 and build configuration. A missing or incompatible identity falls back to normal preparation.
 Objects remain in ccache; Ninja files and test results are regenerated. Cache hits never skip
-build or test steps. Launcher checks and builds also cache Yarn archives while retaining
+build or test steps. Pull requests restore native compiler/preparation and Rust caches but do
+not save private copies: those copies cannot warm other branches and can evict shared entries
+from the repository's cache allowance. Successful branch builds refresh the shared caches.
+Compiler identity uses executable contents rather than installation timestamps. The hostgen
+cache key covers every game's sources and its shared Python helpers; hostgen also validates
+its own input fingerprint before reusing output.
+Launcher checks and builds also cache Yarn archives while retaining
 `yarn install --immutable` and its install/link steps.
 
 ## The level editor

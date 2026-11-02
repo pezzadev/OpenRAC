@@ -7,6 +7,7 @@ import contextlib
 import io
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -14,6 +15,70 @@ import unittest
 from unittest import mock
 
 import ci_cache
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class CachePolicy(unittest.TestCase):
+    def test_native_compiler_caches_do_not_save_pr_private_snapshots(self):
+        """Every native compiler cache can restore on PRs without evicting shared entries."""
+        text = (ROOT / ".github/workflows/checks.yml").read_text()
+        steps = re.split(r"(?m)^      - ", text)
+        caches = [step for step in steps if "uses: hendrikmuhs/ccache-action@" in step]
+        self.assertTrue(caches)
+        for step in caches:
+            self.assertIn("save: ${{ github.event_name != 'pull_request' }}", step)
+        self.assertIn("CCACHE_COMPILERCHECK: content", text)
+
+    def test_preparation_restore_and_save_use_identical_isolated_keys(self):
+        """PRs restore the same preparation as branch builds, through a read-only action."""
+        text = (ROOT / ".github/actions/port-build-cache/action.yml").read_text()
+        steps = re.split(r"(?m)^    - ", text)
+        write = next(step for step in steps if "uses: actions/cache@" in step)
+        read = next(step for step in steps if "uses: actions/cache/restore@" in step)
+        self.assertIn("github.event_name != 'pull_request'", write)
+        self.assertIn("github.event_name == 'pull_request'", read)
+        self.assertEqual(write.split("      with:\n")[1], read.split("      with:\n")[1])
+        self.assertIn("hashFiles('games/**',", read)
+        self.assertIn("'tools/openrac_common/**'", read)
+        self.assertIn("!port/build/${{ inputs.preset }}/_deps/openrac_compressonator-src", read)
+
+    def test_rust_cache_does_not_save_pr_private_snapshots(self):
+        """Large Rust snapshots must not compete with shared native build caches on every PR."""
+        text = (ROOT / ".github/actions/launcher-toolchain/action.yml").read_text()
+        self.assertIn("save-if: ${{ github.event_name != 'pull_request' }}", text)
+
+
+@unittest.skipUnless(shutil.which("ccache") and shutil.which("clang"), "ccache and Clang required")
+@unittest.skipIf(os.name == "nt", "The compiler timestamp fixture uses a POSIX executable")
+class CompilerRestore(unittest.TestCase):
+    def test_compiler_reinstallation_reuses_objects_but_replacement_does_not(self):
+        """Content identity hits across mtime changes and misses when compiler bytes change."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            compiler, source, obj = root / "compiler", root / "source.c", root / "source.o"
+            compiler.write_text('#!/bin/sh\nexec "' + shutil.which("clang") + '" "$@"\n')
+            compiler.chmod(0o755)
+            source.write_text("int result(void) { return 42; }\n")
+            env = {key: value for key, value in os.environ.items() if not key.startswith("CCACHE_")}
+            env.update(CCACHE_DIR=str(root / "cache"), CCACHE_CONFIGPATH=str(root / "ccache.conf"),
+                       CCACHE_COMPILERCHECK="content", CCACHE_LOGFILE=str(root / "ccache.log"))
+            command = ["ccache", str(compiler), "-c", str(source), "-o", str(obj)]
+            def compile_result():
+                """Return this compilation's cache result without cumulative counters."""
+                (root / "ccache.log").unlink(missing_ok=True)
+                subprocess.run(command, env=env, check=True, capture_output=True)
+                return (root / "ccache.log").read_text()
+            self.assertIn("Result: cache_miss", compile_result())
+            original = obj.read_bytes()
+            changed_time = compiler.stat().st_mtime_ns + 10_000_000_000
+            os.utime(compiler, ns=(changed_time, changed_time))
+            obj.unlink()
+            self.assertIn("Result: direct_cache_hit", compile_result())
+            self.assertEqual(original, obj.read_bytes())
+            compiler.write_text(compiler.read_text() + "# Compiler replacement\n")
+            self.assertIn("Result: cache_miss", compile_result())
 
 
 class Identity(unittest.TestCase):
