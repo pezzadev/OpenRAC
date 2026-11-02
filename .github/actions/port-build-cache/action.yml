@@ -61,8 +61,9 @@ runs:
       if: inputs.hostgen == 'true' && github.event_name != 'pull_request' && (steps.identity.outputs.hostgen_fingerprint != '' || steps.windows-identity.outputs.hostgen_fingerprint != '')
       with:
         path: |
-          port/build/${{ inputs.preset }}/games/*/gen
+          port/build/${{ inputs.preset }}/games/*/gen/**/*
           !port/build/${{ inputs.preset }}/games/*/gen/prep
+          !port/build/${{ inputs.preset }}/games/*/gen/prep/**
           !port/build/${{ inputs.preset }}/games/*/gen/hostgen.stamp
         key: hostgen-v1-${{ inputs.variant }}-${{ inputs.preset }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.hostgen_fingerprint || steps.windows-identity.outputs.hostgen_fingerprint }}-g${{ hashFiles('games/**', 'port/game/**', 'port/tools/hostgen/**', 'tools/openrac_common/**') }}
         restore-keys: hostgen-v1-${{ inputs.variant }}-${{ inputs.preset }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.hostgen_fingerprint || steps.windows-identity.outputs.hostgen_fingerprint }}-g
@@ -71,8 +72,9 @@ runs:
       if: inputs.hostgen == 'true' && github.event_name == 'pull_request' && (steps.identity.outputs.hostgen_fingerprint != '' || steps.windows-identity.outputs.hostgen_fingerprint != '')
       with:
         path: |
-          port/build/${{ inputs.preset }}/games/*/gen
+          port/build/${{ inputs.preset }}/games/*/gen/**/*
           !port/build/${{ inputs.preset }}/games/*/gen/prep
+          !port/build/${{ inputs.preset }}/games/*/gen/prep/**
           !port/build/${{ inputs.preset }}/games/*/gen/hostgen.stamp
         key: hostgen-v1-${{ inputs.variant }}-${{ inputs.preset }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.hostgen_fingerprint || steps.windows-identity.outputs.hostgen_fingerprint }}-g${{ hashFiles('games/**', 'port/game/**', 'port/tools/hostgen/**', 'tools/openrac_common/**') }}
         restore-keys: hostgen-v1-${{ inputs.variant }}-${{ inputs.preset }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.hostgen_fingerprint || steps.windows-identity.outputs.hostgen_fingerprint }}-g

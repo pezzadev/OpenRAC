@@ -4,6 +4,7 @@
 
 import copy
 import contextlib
+import glob
 import io
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tarfile
 import unittest
 from unittest import mock
 
@@ -62,12 +64,44 @@ class CachePolicy(unittest.TestCase):
         self.assertEqual(cache_settings(write), cache_settings(read))
         self.assertIn("!port/build/${{ inputs.preset }}/games/*/gen/hostgen.stamp", read)
         self.assertIn("!port/build/${{ inputs.preset }}/games/*/gen/prep", read)
+        self.assertIn("port/build/${{ inputs.preset }}/games/*/gen/**/*", read)
         self.assertIn("hashFiles('games/**',", read)
         self.assertIn("'tools/openrac_common/**'", read)
         self.assertIn("outputs.hostgen_fingerprint", read)
         self.assertNotIn("outputs.fingerprint", read)
         self.assertNotIn("CMakeCache.txt", read)
         self.assertIn("inputs.hostgen == 'true'", read)
+
+    def test_hostgen_archive_cannot_recurse_into_excluded_output(self):
+        """A cached parent directory must not smuggle excluded stamps or prepared sources into tar."""
+        text = (ROOT / ".github/actions/port-build-cache/action.yml").read_text()
+        step = next(step for step in re.split(r"(?m)^    - ", text) if "key: hostgen-v1-" in step)
+        block = step.split("        path: |\n")[1].split("        key:")[0]
+        patterns = [line.strip().replace("${{ inputs.preset }}", "release") for line in block.splitlines()]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            gen = root / "port/build/release/games/game/gen"
+            for name in ("inputs.sha256", "src/unit.c", "hostgen.stamp", "prep/src/unit.c"):
+                file = gen / name
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text(name)
+            included, excluded = set(), set()
+            for pattern in patterns:
+                negative = pattern.startswith("!")
+                matches = {Path(path).resolve() for path in glob.glob(
+                    str(root / pattern.lstrip("!")), recursive=True)}
+                (excluded if negative else included).update(matches)
+            archive = root / "payload.tar"
+            # actions/cache passes matched directories to tar, which recursively adds their children.
+            with tarfile.open(archive, "w") as stream:
+                for path in sorted(included - excluded):
+                    stream.add(path, arcname=path.relative_to(root).as_posix())
+            with tarfile.open(archive) as stream:
+                names = stream.getnames()
+            self.assertIn("port/build/release/games/game/gen/inputs.sha256", names)
+            self.assertIn("port/build/release/games/game/gen/src/unit.c", names)
+            self.assertFalse(any("prep" in Path(name).parts for name in names), names)
+            self.assertFalse(any(Path(name).name == "hostgen.stamp" for name in names), names)
 
     def test_rust_cache_does_not_save_pr_private_snapshots(self):
         """Large Rust snapshots must not compete with shared native build caches on every PR."""
