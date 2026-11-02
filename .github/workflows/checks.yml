@@ -1,5 +1,5 @@
-# Temporary benchmark: identical cold and warm port builds, isolated from shared caches.
-name: port cache measurement
+# Temporary benchmark: seed and validate the independent hostgen cache on fresh runners.
+name: port hostgen cache measurement
 on:
   workflow_dispatch:
 permissions:
@@ -12,10 +12,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   port:
-    name: port cold
+    name: port seed
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     env:
+      EXPECT_HOSTGEN_REUSE: "0"
       MESA_SHADER_CACHE_DIR: /tmp/openrac-mesa
       MESA_SHADER_CACHE_MAX_SIZE: 1G
     steps:
@@ -54,12 +55,47 @@ jobs:
           python -m unittest discover -s port/tools/hostgen -v
           # This job installs both Clang and ccache, so the real cache fixture runs here.
           python -m unittest discover -s tools -p test_ci_cache.py -v
+          python -m unittest discover -s tools -p test_hostgen_cache.py -v
+
+      - name: Record restored hostgen output
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, sys
+          sys.path.insert(0, 'tools')
+          import ci_cache
+          print('Hostgen identity components:', {key: ci_cache.fingerprint(value) for key, value in ci_cache.hostgen_identity().items()})
+          root = pathlib.Path('port/build/release/games')
+          expected = {p.parent.name for p in pathlib.Path('port/game').glob('*/hostgen.json')}
+          restored = {p.parent.parent.name: p.read_text().strip() for p in root.glob('*/gen/inputs.sha256')}
+          print('Restored hostgen fingerprints:', restored)
+          if os.environ['EXPECT_HOSTGEN_REUSE'] == '1':
+              assert restored.keys() == expected, (restored.keys(), expected)
+              assert not list(root.glob('*/gen/hostgen.stamp')), 'Ninja stamps must not be restored'
+              assert not list(root.glob('*/gen/prep')), 'Prepared sources must not be restored'
+          pathlib.Path(os.environ['RUNNER_TEMP'], 'hostgen-before.json').write_text(json.dumps(restored))
+          PY
 
       - name: Build
         working-directory: port
         run: |
           cmake --preset release -DOPENRAC_ENHANCED_RENDERING=OFF -DOPENRAC_PROBE_BAKER=OFF
           cmake --build --preset release
+
+      - name: Verify hostgen translation reuse
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path('port/build/release/games')
+          generated = {p.parent.parent.name: p.read_text().strip() for p in root.glob('*/gen/inputs.sha256')}
+          prepared = sorted(p.parent.parent.name for p in root.glob('*/gen/prep'))
+          print('Generated fingerprints:', generated)
+          print('Games translated in this job:', prepared)
+          if os.environ['EXPECT_HOSTGEN_REUSE'] == '1':
+              before = json.loads(pathlib.Path(os.environ['RUNNER_TEMP'], 'hostgen-before.json').read_text())
+              assert generated == before, (before, generated)
+              assert not prepared, prepared
+              assert len(list(root.glob('*/gen/hostgen.stamp'))) == len(generated), 'Validation must run through Ninja'
+          PY
 
       - name: Verify compatibility build configuration
         working-directory: port
@@ -90,6 +126,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     env:
+      EXPECT_HOSTGEN_REUSE: "1"
       MESA_SHADER_CACHE_DIR: /tmp/openrac-mesa
       MESA_SHADER_CACHE_MAX_SIZE: 1G
     steps:
@@ -128,12 +165,47 @@ jobs:
           python -m unittest discover -s port/tools/hostgen -v
           # This job installs both Clang and ccache, so the real cache fixture runs here.
           python -m unittest discover -s tools -p test_ci_cache.py -v
+          python -m unittest discover -s tools -p test_hostgen_cache.py -v
+
+      - name: Record restored hostgen output
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, sys
+          sys.path.insert(0, 'tools')
+          import ci_cache
+          print('Hostgen identity components:', {key: ci_cache.fingerprint(value) for key, value in ci_cache.hostgen_identity().items()})
+          root = pathlib.Path('port/build/release/games')
+          expected = {p.parent.name for p in pathlib.Path('port/game').glob('*/hostgen.json')}
+          restored = {p.parent.parent.name: p.read_text().strip() for p in root.glob('*/gen/inputs.sha256')}
+          print('Restored hostgen fingerprints:', restored)
+          if os.environ['EXPECT_HOSTGEN_REUSE'] == '1':
+              assert restored.keys() == expected, (restored.keys(), expected)
+              assert not list(root.glob('*/gen/hostgen.stamp')), 'Ninja stamps must not be restored'
+              assert not list(root.glob('*/gen/prep')), 'Prepared sources must not be restored'
+          pathlib.Path(os.environ['RUNNER_TEMP'], 'hostgen-before.json').write_text(json.dumps(restored))
+          PY
 
       - name: Build
         working-directory: port
         run: |
           cmake --preset release -DOPENRAC_ENHANCED_RENDERING=OFF -DOPENRAC_PROBE_BAKER=OFF
           cmake --build --preset release
+
+      - name: Verify hostgen translation reuse
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path('port/build/release/games')
+          generated = {p.parent.parent.name: p.read_text().strip() for p in root.glob('*/gen/inputs.sha256')}
+          prepared = sorted(p.parent.parent.name for p in root.glob('*/gen/prep'))
+          print('Generated fingerprints:', generated)
+          print('Games translated in this job:', prepared)
+          if os.environ['EXPECT_HOSTGEN_REUSE'] == '1':
+              before = json.loads(pathlib.Path(os.environ['RUNNER_TEMP'], 'hostgen-before.json').read_text())
+              assert generated == before, (before, generated)
+              assert not prepared, prepared
+              assert len(list(root.glob('*/gen/hostgen.stamp'))) == len(generated), 'Validation must run through Ninja'
+          PY
 
       - name: Verify compatibility build configuration
         working-directory: port

@@ -20,6 +20,11 @@ import ci_cache
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def cache_settings(step):
+    """Compare action settings without a following step's explanatory comment."""
+    return step.split("      with:\n")[1].split("    #")[0].rstrip()
+
+
 class CachePolicy(unittest.TestCase):
     def test_native_compiler_caches_do_not_save_pr_private_snapshots(self):
         """Every native compiler cache can restore on PRs without evicting shared entries."""
@@ -39,10 +44,30 @@ class CachePolicy(unittest.TestCase):
         read = next(step for step in steps if "uses: actions/cache/restore@" in step)
         self.assertIn("github.event_name != 'pull_request'", write)
         self.assertIn("github.event_name == 'pull_request'", read)
-        self.assertEqual(write.split("      with:\n")[1], read.split("      with:\n")[1])
+        self.assertEqual(cache_settings(write), cache_settings(read))
+        self.assertIn("key: prep-v2-", read)
+        self.assertNotIn("games/*/gen", read)
+        self.assertNotIn("hashFiles('games/**',", read)
+        self.assertIn("!port/build/${{ inputs.preset }}/_deps/openrac_compressonator-src", read)
+
+    def test_hostgen_restore_is_independent_and_always_validated(self):
+        """Only generated text is restored, without a Ninja stamp that could bypass validation."""
+        text = (ROOT / ".github/actions/port-build-cache/action.yml").read_text()
+        steps = [step for step in re.split(r"(?m)^    - ", text) if "key: hostgen-v1-" in step]
+        self.assertEqual(2, len(steps))
+        write = next(step for step in steps if "uses: actions/cache@" in step)
+        read = next(step for step in steps if "uses: actions/cache/restore@" in step)
+        self.assertIn("github.event_name != 'pull_request'", write)
+        self.assertIn("github.event_name == 'pull_request'", read)
+        self.assertEqual(cache_settings(write), cache_settings(read))
+        self.assertIn("!port/build/${{ inputs.preset }}/games/*/gen/hostgen.stamp", read)
+        self.assertIn("!port/build/${{ inputs.preset }}/games/*/gen/prep", read)
         self.assertIn("hashFiles('games/**',", read)
         self.assertIn("'tools/openrac_common/**'", read)
-        self.assertIn("!port/build/${{ inputs.preset }}/_deps/openrac_compressonator-src", read)
+        self.assertIn("outputs.hostgen_fingerprint", read)
+        self.assertNotIn("outputs.fingerprint", read)
+        self.assertNotIn("CMakeCache.txt", read)
+        self.assertIn("inputs.hostgen == 'true'", read)
 
     def test_rust_cache_does_not_save_pr_private_snapshots(self):
         """Large Rust snapshots must not compete with shared native build caches on every PR."""
@@ -82,6 +107,50 @@ class CompilerRestore(unittest.TestCase):
 
 
 class Identity(unittest.TestCase):
+    def test_cpu_and_runner_changes_leave_hostgen_identity_unchanged(self):
+        """A native configure miss must not discard valid fixed-target MIPS translation."""
+        with mock.patch("ci_cache.tool_identity", return_value={"sha256": "compiler"}), \
+                mock.patch("ci_cache.system_packages", return_value=["compiler-runtime=1"]), \
+                mock.patch("ci_cache.Path.read_text", return_value="flags\t: sse2 avx\n"), \
+                mock.patch("ci_cache.platform.release", return_value="kernel-one"), \
+                mock.patch.dict(os.environ, {"OPENRAC_CLANG": "/tools/clang", "ImageVersion": "one"}):
+            generated = ci_cache.fingerprint(ci_cache.hostgen_identity())
+            configured = ci_cache.fingerprint(ci_cache.installed_identity())
+            with mock.patch("ci_cache.platform.release", return_value="kernel-two"), \
+                    mock.patch("ci_cache.Path.read_text", return_value="flags\t: sse2 avx avx2\n"), \
+                    mock.patch.dict(os.environ, {"ImageVersion": "two", "PROCESSOR_IDENTIFIER": "other CPU"}):
+                self.assertEqual(generated, ci_cache.fingerprint(ci_cache.hostgen_identity()))
+                self.assertNotEqual(configured, ci_cache.fingerprint(ci_cache.installed_identity()))
+
+    def test_hostgen_identity_retains_its_compiler_and_platform_boundaries(self):
+        """CPU-independent reuse must still isolate changed tools, Python, paths and platforms."""
+        with mock.patch("ci_cache.tool_identity", return_value={"sha256": "compiler"}), \
+                mock.patch("ci_cache.system_packages", return_value=["compiler-runtime=1"]), \
+                mock.patch.dict(os.environ, {"OPENRAC_CLANG": "/tools/clang"}):
+            first = ci_cache.fingerprint(ci_cache.hostgen_identity())
+            for target, value in (("tool_identity", {"sha256": "replacement"}),
+                                  ("Path.cwd", Path("/other-workspace")),
+                                  ("platform.system", "other OS"), ("platform.machine", "other arch")):
+                with mock.patch("ci_cache." + target, return_value=value):
+                    self.assertNotEqual(first, ci_cache.fingerprint(ci_cache.hostgen_identity()), target)
+            with mock.patch("ci_cache.sys.version", "other Python"):
+                self.assertNotEqual(first, ci_cache.fingerprint(ci_cache.hostgen_identity()))
+            if os.name != "nt":
+                with mock.patch("ci_cache.system_packages", return_value=["compiler-runtime=2"]):
+                    self.assertNotEqual(first, ci_cache.fingerprint(ci_cache.hostgen_identity()))
+
+    def test_configure_identity_failure_does_not_disable_hostgen_reuse(self):
+        """Hostgen can restore safely even if native CPU/configure identity is unavailable."""
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary) / "outputs"
+            identity = {"clang": "known", "workspace": "known"}
+            with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(out)}), \
+                    mock.patch("ci_cache.installed_identity", side_effect=RuntimeError("no CPU metadata")), \
+                    mock.patch("ci_cache.hostgen_identity", return_value=identity), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                ci_cache.main()
+            self.assertEqual("hostgen_fingerprint=" + ci_cache.fingerprint(identity) + "\n", out.read_text())
+
     def test_environment_changes_invalidate_configure_results(self):
         identity = {"workspace": "/work", "tools": [{"path": "/clang", "sha256": "a"}],
                     "python": {"path": "/python", "version": "3.12"},
@@ -118,6 +187,7 @@ class Identity(unittest.TestCase):
             out = Path(temporary) / "outputs"
             with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(out)}), \
                     mock.patch("ci_cache.installed_identity", side_effect=RuntimeError("no SDK identity")), \
+                    mock.patch("ci_cache.hostgen_identity", side_effect=RuntimeError("no compiler identity")), \
                     contextlib.redirect_stdout(io.StringIO()) as log:
                 ci_cache.main()
             self.assertIn("Skipping CI preparation cache", log.getvalue())
