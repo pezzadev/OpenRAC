@@ -356,7 +356,8 @@ jobs:
   # the compatibility build above. The preset explicitly compiles enhanced code in.
   port-vulkan-enhanced:
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    # Leave room for the full test suite after a cold dependency build.
+    timeout-minutes: 60
     env:
       MESA_SHADER_CACHE_DIR: /tmp/openrac-mesa
       MESA_SHADER_CACHE_MAX_SIZE: 1G
