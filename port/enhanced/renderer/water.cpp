@@ -19,7 +19,6 @@
 #include "enhanced/renderer/local_lights.h"
 #include "enhanced/renderer/reflection_material.h"
 #include "enhanced/renderer/water_internal.h"
-#include "enhanced/viewer/scene_lighting.h"
 #include "enhanced_viewer_shaders.h"
 #include "renderer/colour_graph.h"
 #include "renderer/gl.h"
@@ -38,12 +37,21 @@ WaterDebugSettings water_debug;
 // Profile and live values share the existing water controls mutex.
 OceanMaterial ocean_profile_material;
 OceanMaterial ocean_live_material;
+std::optional<float> ocean_authored_roughness;
+std::optional<float> ocean_authored_reflectivity;
 std::atomic<std::uint64_t> water_reset_epoch{0};
+
+OceanMaterial ocean_defaults() {
+    auto material = ocean_profile_material;
+    material.roughness = ocean_authored_roughness.value_or(material.roughness);
+    material.reflectivity = ocean_authored_reflectivity.value_or(material.reflectivity);
+    return material;
+}
 
 void begin_ocean_material(const OceanMaterial& material) {
     const std::lock_guard lock(water_debug_mutex);
     ocean_profile_material = material;
-    ocean_live_material = material;
+    ocean_live_material = ocean_defaults();
 }
 
 bool water_disabled() {
@@ -274,11 +282,6 @@ void Water::bind(
         material.roughness = ocean.roughness;
         material.reflectivity = ocean.reflectivity;
         material.strength = ocean.reflection_strength;
-        if (auto* lighting = lighting::scene_lighting(m_scene)) {
-            const auto& optics = lighting->materials().ocean_optics();
-            material.roughness = optics.roughness.value_or(material.roughness);
-            material.reflectivity = optics.reflectivity.value_or(material.reflectivity);
-        }
         glUniform3f(
             shader.uniform("water_ocean_colour"), ocean.colour[0], ocean.colour[1], ocean.colour[2]
         );
@@ -473,9 +476,21 @@ void set_ocean_material(OceanMaterial material) {
     ocean_live_material = material;
 }
 
+void set_ocean_optics_defaults(std::optional<float> roughness, std::optional<float> reflectivity) {
+    const std::lock_guard lock(water_debug_mutex);
+    if (roughness != ocean_authored_roughness) {
+        ocean_authored_roughness = roughness;
+        ocean_live_material.roughness = roughness.value_or(ocean_profile_material.roughness);
+    }
+    if (reflectivity != ocean_authored_reflectivity) {
+        ocean_authored_reflectivity = reflectivity;
+        ocean_live_material.reflectivity = reflectivity.value_or(ocean_profile_material.reflectivity);
+    }
+}
+
 void reset_ocean_material() {
     const std::lock_guard lock(water_debug_mutex);
-    ocean_live_material = ocean_profile_material;
+    ocean_live_material = ocean_defaults();
 }
 
 WaterDebugSettings water_debug_settings() {

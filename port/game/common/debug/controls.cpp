@@ -199,7 +199,7 @@ void ocean_material_controls() {
         ImGuiSliderFlags_AlwaysClamp
     );
     // Reset takes precedence if the user edited another control on the same frame.
-    if (ImGui::Button("Reset ocean material to level profile")) {
+    if (ImGui::Button("Reset ocean material to authored defaults")) {
         enhanced::reset_ocean_material();
         return;
     }

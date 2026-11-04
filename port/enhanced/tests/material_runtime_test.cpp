@@ -8,6 +8,7 @@
 
 #include "common/staged_file.h"
 #include "enhanced/renderer/material_runtime.h"
+#include "enhanced/renderer/water.h"
 #include "tests/check.h"
 
 namespace {
@@ -70,14 +71,29 @@ void test_ocean_preset(const std::filesystem::path& directory) {
     enhanced::MaterialRuntime runtime;
     CHECK(runtime.load(source));
     CHECK(runtime.editor()->bindings->assets->sources[0].identity.material_name == "@water");
+    enhanced::reset_ocean_material();
+    const auto profile = enhanced::ocean_material();
     CHECK(runtime.patch(0, {{"ocean.roughness", .16}, {"ocean.reflectivity", .020}}));
-    CHECK(runtime.ocean_optics().roughness == .16f);
-    CHECK(runtime.ocean_optics().reflectivity == .020f);
+    auto live = enhanced::ocean_material();
+    CHECK(live.roughness == .16f && live.reflectivity == .020f);
+    live.roughness = .31f;
+    live.reflectivity = .06f;
+    live.colour[0] = .13f;
+    enhanced::set_ocean_material(live);
+    CHECK(enhanced::ocean_material().roughness == .31f);
+    CHECK(enhanced::ocean_material().reflectivity == .06f);
+    CHECK(runtime.patch(0, "ocean.roughness", .21));
+    live = enhanced::ocean_material();
+    CHECK(live.roughness == .21f && live.reflectivity == .06f && live.colour[0] == .13f);
+    enhanced::reset_ocean_material();
+    live = enhanced::ocean_material();
+    CHECK(live.roughness == .21f && live.reflectivity == .020f && live.colour == profile.colour);
     CHECK(enhanced::reflection_material_settings(enhanced::ReflectionSurface::Water).roughness
           == .22f);
     CHECK(!runtime.editor()->transport_dirty);
     runtime.reset();
-    CHECK(!runtime.ocean_optics().roughness && !runtime.ocean_optics().reflectivity);
+    live = enhanced::ocean_material();
+    CHECK(live.roughness == profile.roughness && live.reflectivity == profile.reflectivity);
 }
 
 // Independent cached optical records reset inherited values instead of leaking the previous object's edits.

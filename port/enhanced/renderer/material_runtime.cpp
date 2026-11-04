@@ -10,6 +10,7 @@
 
 #include "assets/disc/checksum.h"
 #include "common/log.h"
+#include "enhanced/renderer/water.h"
 
 namespace openrac::enhanced {
 namespace {
@@ -110,7 +111,7 @@ void MaterialRuntime::clear() {
     m_baseline.reset();
     m_editor.reset();
     m_responses.clear();
-    m_ocean_optics = {};
+    set_ocean_optics_defaults({}, {});
     m_author = {};
     m_edits = {};
     m_path.clear();
@@ -148,20 +149,22 @@ void MaterialRuntime::publish(std::shared_ptr<const scene::MaterialBindings> bin
     editor->dirty = !m_edits.rules.empty() || !m_edits.presets.empty();
     editor->transport_dirty = editor->bindings->transport_stamp != m_transport_baseline;
     // Existing water rendering consumes one shared appearance; simulation state remains independently owned.
-    m_ocean_optics = {};
+    std::optional<float> ocean_roughness;
+    std::optional<float> ocean_reflectivity;
     for (std::size_t n = 0; n < responses.size(); ++n) {
         if (editor->bindings->assets->sources[n].identity.material_name == "@water") {
             set_reflection_material_settings(ReflectionSurface::Water, responses[n].reflection);
             const auto& properties = editor->bindings->bindings[n].values.properties;
             if (properties.contains("ocean.roughness")) {
-                m_ocean_optics.roughness = materials::number_value(properties, "ocean.roughness", .22f);
+                ocean_roughness = materials::number_value(properties, "ocean.roughness", .22f);
             }
             if (properties.contains("ocean.reflectivity")) {
-                m_ocean_optics.reflectivity =
+                ocean_reflectivity =
                     materials::number_value(properties, "ocean.reflectivity", .02037f);
             }
         }
     }
+    set_ocean_optics_defaults(ocean_roughness, ocean_reflectivity);
     m_responses = std::move(responses);
     m_editor = std::move(editor);
 }
