@@ -82,6 +82,11 @@ void test_ocean_preset(const std::filesystem::path& directory) {
     enhanced::set_ocean_material(live);
     CHECK(enhanced::ocean_material().roughness == .31f);
     CHECK(enhanced::ocean_material().reflectivity == .06f);
+    CHECK(runtime.patch(0, {{"ocean.roughness", .16}, {"ocean.reflectivity", .020}}));
+    const auto reapplied = enhanced::ocean_material();
+    CHECK(reapplied.roughness == .16f && reapplied.reflectivity == .020f);
+    CHECK(reapplied.colour == live.colour);
+    enhanced::set_ocean_material(live);
     CHECK(runtime.patch(0, "ocean.roughness", .21));
     live = enhanced::ocean_material();
     CHECK(live.roughness == .21f && live.reflectivity == .06f && live.colour[0] == .13f);

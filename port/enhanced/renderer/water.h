@@ -28,6 +28,8 @@ OceanMaterial ocean_material();
 void set_ocean_material(OceanMaterial material);
 // Updates authored defaults, retaining live edits to fields whose defaults did not change.
 void set_ocean_optics_defaults(std::optional<float> roughness, std::optional<float> reflectivity);
+// Restore only the fields explicitly applied in the material inspector.
+void reset_ocean_optics(bool roughness, bool reflectivity);
 // Restore the loaded level profile with any authored material overrides.
 void reset_ocean_material();
 

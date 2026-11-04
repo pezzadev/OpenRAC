@@ -182,15 +182,24 @@ Result<void> MaterialRuntime::patch(std::size_t binding, materials::Properties p
         if (!valid) {
             return unexpected(valid.error());
         }
+        const auto& source = m_editor->bindings->assets->sources[binding];
+        const bool ocean_roughness = source.identity.material_name == "@water"
+                                     && properties.contains("ocean.roughness");
+        const bool ocean_reflectivity = source.identity.material_name == "@water"
+                                        && properties.contains("ocean.reflectivity");
         auto edits = m_edits;
-        auto rule = edit_rule(m_editor->bindings->assets->sources[binding]);
+        auto rule = edit_rule(source);
         const auto id = rule.id;
         edits.rules.try_emplace(id, std::move(rule));
         auto& fields = edits.rules.at(id).properties;
         for (auto& [key, value] : properties) {
             fields.insert_or_assign(key, std::move(value));
         }
-        return preview(std::move(edits));
+        auto result = preview(std::move(edits));
+        if (result && (ocean_roughness || ocean_reflectivity)) {
+            reset_ocean_optics(ocean_roughness, ocean_reflectivity);
+        }
+        return result;
     } catch (const std::exception& error) {
         return unexpected(Error{error.what()});
     }

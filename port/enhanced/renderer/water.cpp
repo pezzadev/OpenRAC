@@ -488,6 +488,17 @@ void set_ocean_optics_defaults(std::optional<float> roughness, std::optional<flo
     }
 }
 
+void reset_ocean_optics(bool roughness, bool reflectivity) {
+    const std::lock_guard lock(water_debug_mutex);
+    const auto defaults = ocean_defaults();
+    if (roughness) {
+        ocean_live_material.roughness = defaults.roughness;
+    }
+    if (reflectivity) {
+        ocean_live_material.reflectivity = defaults.reflectivity;
+    }
+}
+
 void reset_ocean_material() {
     const std::lock_guard lock(water_debug_mutex);
     ocean_live_material = ocean_defaults();
