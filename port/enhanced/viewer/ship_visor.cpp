@@ -11,7 +11,6 @@
 
 #include "enhanced/renderer/reflection_material.h"
 #include "scene/level.h"
-#include "scene/material_overrides.h"
 
 namespace openrac::lighting {
 namespace {
@@ -83,7 +82,7 @@ constexpr ShipLayout kGreenShip{531, 15042, 18, 0x30a33792a887a3cdull};
 
 // Fits a pane only when the selected offsets still describe the reviewed frame.
 template <std::size_t Rows, std::size_t Columns>
-bool fit_pane(
+void fit_pane(
     scene::LevelData& level,
     const ShipLayout& layout,
     const std::array<std::array<int, Columns>, Rows>& ribs
@@ -91,12 +90,12 @@ bool fit_pane(
     // Other regional exports and replacement models need their own verified fit.
     const auto ship = level.moby_classes.find(layout.class_id);
     if (ship == level.moby_classes.end() || ship->second.second) {
-        return false;
+        return;
     }
     auto& model = level.models[ship->second.first];
     if (model.primitives.size() != 1
         || model.primitives.front().index_count != layout.index_count) {
-        return false;
+        return;
     }
     const auto start = model.primitives.front().first_index;
     std::array<std::array<scene::Vertex, Columns>, Rows> pane;
@@ -108,7 +107,7 @@ bool fit_pane(
             const auto& anchor = level.vertices[level.indices[start + unsigned(ribs[r][c])]];
             // All anchors must belong entirely to the moving canopy joint.
             if (anchor.joints[0] != layout.joint || anchor.weights[0] != 1.f) {
-                return false;
+                return;
             }
             for (const float coordinate : anchor.position) {
                 // Treat signed zero equally across exporters and host transforms.
@@ -120,7 +119,7 @@ bool fit_pane(
     }
     // Matching counts and skin weights alone do not establish the frame geometry.
     if (signature != layout.signature) {
-        return false;
+        return;
     }
 
     const auto vertex_start = static_cast<std::uint32_t>(level.vertices.size());
@@ -155,7 +154,6 @@ bool fit_pane(
     material.source_slot = 1;
     level.materials.push_back(std::move(material));
     model.primitives.push_back(primitive);
-    return true;
 }
 }  // namespace
 
@@ -164,11 +162,7 @@ void add_ship_visor(scene::LevelData& level) {
     if (level.game != "rac1") {
         return;
     }
-    const bool veldin = fit_pane(level, kVeldinShip, kVeldinRibs);
-    const bool green = fit_pane(level, kGreenShip, kGreenShipRails);
-    // Level loading resolved the catalog before the runtime panes existed.
-    if (veldin || green) {
-        scene::prepare_material_overrides(level);
-    }
+    fit_pane(level, kVeldinShip, kVeldinRibs);
+    fit_pane(level, kGreenShip, kGreenShipRails);
 }
 }  // namespace openrac::lighting

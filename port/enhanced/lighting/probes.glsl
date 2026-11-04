@@ -738,11 +738,12 @@ vec3 probe_linear(vec3 c) {
     return mix(pow((c + 0.055) / 1.055, vec3(2.4)), c / 12.92, lessThanEqual(c, vec3(0.04045)));
 }
 
-vec3 probe_display(vec3 c) {
+vec3 probe_display_unclamped(vec3 c) {
     c = max(c, vec3(0.0));
-    return clamp(
-        mix(1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, c * 12.92, lessThanEqual(c, vec3(0.0031308))),
-        0.0,
-        1.0
-    );
+    return mix(1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, c * 12.92,
+               lessThanEqual(c, vec3(0.0031308)));
+}
+
+vec3 probe_display(vec3 c) {
+    return clamp(probe_display_unclamped(c), 0.0, 1.0);
 }

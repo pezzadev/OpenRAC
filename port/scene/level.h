@@ -288,12 +288,14 @@ Vec3 bounds_centre(const Model& model, const Mat4& matrix);
 // folder it is in is the mod's folder for the level (LevelData::overrides): its
 // meshes and textures are read in place of the level's own of the same path,
 // whether or not the placements file itself is there.
+// prepare_geometry can add runtime geometry before material overrides are resolved.
 bool load_level(
     const std::filesystem::path& dir,
     LevelData& out,
     std::string& error,
     const std::filesystem::path& edited = {},
-    const std::vector<std::filesystem::path>& mod_roots = {}
+    const std::vector<std::filesystem::path>& mod_roots = {},
+    void (*prepare_geometry)(LevelData&) = nullptr
 );
 
 // The level's sky textures (textures/sky_NNNN.png, by the sky's own texture numbers), including the

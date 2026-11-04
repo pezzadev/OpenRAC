@@ -98,11 +98,15 @@ struct LevelSources {
     std::filesystem::path dir;
     std::filesystem::path edited;
     std::vector<std::filesystem::path> mod_roots;
+    void (*prepare_geometry)(scene::LevelData&) = nullptr;
 };
 
 LevelSources level_sources(int wanted) {
     LevelSources sources;
     sources.dir = g->levels / std::format("level_{:02d}", wanted);
+    if (gl::enhanced_rendering_available() && g->game == "rac1-ntsc") {
+        sources.prepare_geometry = lighting::add_ship_visor;
+    }
     // An edited level's scenery (--mods): the editor's pack writes it beside its gameplay file.
     if (openrac_game_mods_dir != nullptr) {
         sources.edited = std::filesystem::path(openrac_game_mods_dir)
@@ -131,8 +135,9 @@ bool read_level(int wanted, const LevelSources& sources, std::string& error) {
         }
     }
     crash::level_breadcrumb("level data read", wanted);
-    const bool read =
-        scene::load_level(sources.dir, g->level, error, sources.edited, sources.mod_roots);
+    const bool read = scene::load_level(
+        sources.dir, g->level, error, sources.edited, sources.mod_roots, sources.prepare_geometry
+    );
     crash::level_breadcrumb(read ? "level data ready" : "level data failed", wanted);
     return read;
 }
@@ -185,7 +190,8 @@ void preload_level(int number) {
     g_preload.read = std::async(std::launch::async, [sources = level_sources(number)] {
         Preload::Read read;
         read.ok = scene::load_level(
-            sources.dir, read.level, read.error, sources.edited, sources.mod_roots
+            sources.dir, read.level, read.error, sources.edited, sources.mod_roots,
+            sources.prepare_geometry
         );
         return read;
     });
@@ -314,9 +320,6 @@ void use_level(int number) {
         } else {
             log::warn("mods: prop mesh {}: {}", mesh.string(), why);
         }
-    }
-    if (gl::enhanced_rendering_available() && g->game == "rac1-ntsc") {
-        lighting::add_ship_visor(g->level);
     }
     enhanced::install_texture_upscaler(g->renderer->textures());
     crash::level_breadcrumb("level scene upload", wanted);

@@ -12,6 +12,7 @@
 
 #include "common/log.h"
 #include "common/stats.h"
+#include "enhanced/renderer/reflection_material.h"
 #include "renderer/colour_graph.h"
 #include "renderer/gl.h"
 #include "renderer/precise_depth.h"
@@ -1365,6 +1366,7 @@ void LevelScene::draw_layer(
             glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
             glDepthMask(mobys && moby_step.depth_write ? GL_TRUE : GL_FALSE);
         }
+        bool premultiplied = false;
         glUniform2f(
             program->uniform("gameplay_rim_lift"), m_gameplay_rim_lift[0], m_gameplay_rim_lift[1]
         );
@@ -1527,6 +1529,14 @@ void LevelScene::draw_layer(
                     }
                     set_material = run_material;
                     set_variant = variant;
+                }
+                if (metal && enhanced_material) {
+                    const bool glass = original.name == enhanced::kShipVisorMaterial;
+                    if (glass != premultiplied) {
+                        glBlendFuncSeparate(glass ? GL_ONE : GL_SRC_ALPHA,
+                                            GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+                        premultiplied = glass;
+                    }
                 }
                 submit_instances(batch, run_first, run_count, instances);
                 rigid_prepass_draws += group_rigid ? 1u : 0u;

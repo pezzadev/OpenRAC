@@ -81,5 +81,7 @@ vec4 thin_glass_surface() {
     vec3 reflection = environment_specular(v_world_position,n,eye,object_reflection_material.x,f0,
                                             vec3(.11,.19,.25)*fresnel);
     reflection *= object_reflection_material.z*object_reflection_tint.rgb*object_reflection_tint.a;
-    return vec4(probe_display((reflection+object_glass_transmission.rgb*tint_weight)/max(opacity,1e-5)),opacity);
+    // Keep bright reflections through fog and premultiplication, before framebuffer clamping.
+    return vec4(probe_display_unclamped(
+        (reflection+object_glass_transmission.rgb*tint_weight)/max(opacity,1e-5)),opacity);
 }

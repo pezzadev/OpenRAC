@@ -500,6 +500,9 @@ void main() {
             mrgb = vec3(mix(mp_vec3(fog_colour.rgb), mp_vec3(mrgb), mp_float(v_fog)));
         }
         out_colour = vec4(mrgb, clamp(m.a, 0.0, 1.0));
+#ifdef OPENRAC_ENHANCED_RENDERING
+        if (object_thin_glass == 1) out_colour.rgb *= out_colour.a;
+#endif
         return;
     }
 #endif
