@@ -228,8 +228,8 @@ void main() {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, green.data());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    const auto draw = [&](int count) {
-        glUniform1i(chrome.uniform("environment_count"), count);
+    const auto draw = [&](const renderer::Shader& program, int count) {
+        glUniform1i(program.uniform("environment_count"), count);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glReadPixels(0, 0, kWidth, kWidth, GL_RGBA, GL_UNSIGNED_BYTE, fixture.pixels.data());
         return std::array{fixture.pixels[0], fixture.pixels[1], fixture.pixels[2]};
@@ -237,7 +237,7 @@ void main() {
     const auto draw_chrome = [&](bool enabled, float strength, int count) {
         glUniform1i(chrome.uniform("object_reflection_enabled"), enabled ? 1 : 0);
         glUniform3f(chrome.uniform("object_reflection_material"), .04f, .65f, strength);
-        return draw(count);
+        return draw(chrome, count);
     };
     const auto reflected = draw_chrome(true, 1, 2);
     CHECK(reflected[0] > 80 && reflected[1] < 5 && reflected[2] > 80);
@@ -246,25 +246,52 @@ void main() {
     CHECK(draw_chrome(true, 1, 0) == legacy);
     CHECK((draw_chrome(true, 0, 2) == std::array<std::uint8_t, 3>{0, 0, 0}));
 
-    // A dielectric keeps its capture and direct highlights with no valid diffuse GI probes.
+    auto solid_source = std::string(scene::shaders::mesh_frag);
+    solid_source.insert(solid_source.find('\n') + 1,
+                        "#define OPENRAC_SOLID 1\n#define OPENRAC_COLOUR_SPECIALISED 1\n"
+                        "#define OPENRAC_STATIC_COLOUR 1\n");
+    renderer::Shader solid;
+    CHECK(solid.build("solid static dielectric", metal_vertex,
+                      lighting::probe_mesh_fragment(std::move(solid_source)), fixture.error));
+    solid.use();
+    probes.bind(solid, scene::Layer::Terrain, false);
+    reference_selection.bind(solid);
+    glUniformMatrix4fv(solid.uniform("view"), 1, GL_FALSE, view.data());
+    glUniform1i(solid.uniform("environment_brdf"), 24);
+    glUniform1i(solid.uniform("environment_map"), 20);
+    glUniform1i(solid.uniform("environment_resolution"), 8);
+    glUniform1i(solid.uniform("environment_columns"), static_cast<int>(asset.columns()));
+    glActiveTexture(GL_TEXTURE0 + 20);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glActiveTexture(GL_TEXTURE0 + 24);
+    glBindTexture(GL_TEXTURE_2D, brdf_texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, original);
+
+    // Both colour variants retain capture and direct highlights without valid diffuse GI.
+    chrome.use();
     glUniform1i(chrome.uniform("metal_pass"), 0);
-    glUniform4f(chrome.uniform("material_colour"), 1, 1, 1, 1);
-    glUniform3f(chrome.uniform("material_dielectric"), .25f, .04f, 1);
-    glUniform3f(chrome.uniform("material_dielectric_tint"), 1, 1, 1);
-    glUniform1i(chrome.uniform("probe_mode"), 4);
-    CHECK((draw(2) == std::array<std::uint8_t, 3>{255, 0, 255}));
-    glUniform1i(chrome.uniform("probe_mode"), 1);
-    const auto capture = draw(2);
-    const auto no_specular = draw(0);
-    CHECK(capture[0] > no_specular[0] && capture[2] > no_specular[2]);
-    CHECK(no_specular[0] == 0 && no_specular[1] > 240 && no_specular[2] == 0);
-    std::array<float, 256> dielectric_lights{};
-    dielectric_lights[0] = .5f;
-    dielectric_lights[6] = -1;
-    glUniform4fv(chrome.uniform("light_sets[0]"), 64, dielectric_lights.data());
-    CHECK(draw(0)[0] > no_specular[0]);
-    dielectric_lights[0] = 0;
-    glUniform4fv(chrome.uniform("light_sets[0]"), 64, dielectric_lights.data());
+    for (const auto* program : {&chrome, &solid}) {
+        program->use();
+        glUniform4f(program->uniform("material_colour"), 1, 1, 1, 1);
+        glUniform3f(program->uniform("material_dielectric"), .25f, .04f, 1);
+        glUniform3f(program->uniform("material_dielectric_tint"), 1, 1, 1);
+        glUniform1i(program->uniform("probe_mode"), 4);
+        CHECK((draw(*program, 2) == std::array<std::uint8_t, 3>{255, 0, 255}));
+        glUniform1i(program->uniform("probe_mode"), 1);
+        const auto capture = draw(*program, 2);
+        const auto no_specular = draw(*program, 0);
+        CHECK(capture[0] > no_specular[0] && capture[2] > no_specular[2]);
+        CHECK(no_specular[0] == 0 && no_specular[1] > 240 && no_specular[2] == 0);
+        std::array<float, 256> dielectric_lights{};
+        dielectric_lights[0] = .5f;
+        dielectric_lights[6] = -1;
+        glUniform4fv(program->uniform("light_sets[0]"), 64, dielectric_lights.data());
+        CHECK(draw(*program, 0)[0] > no_specular[0]);
+        dielectric_lights[0] = 0;
+        glUniform4fv(program->uniform("light_sets[0]"), 64, dielectric_lights.data());
+    }
+    chrome.use();
     glUniform1i(chrome.uniform("metal_pass"), 1);
 
     // Missing reflection captures use local GI rather than the old green chrome artwork.

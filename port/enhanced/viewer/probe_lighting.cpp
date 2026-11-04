@@ -131,13 +131,7 @@ std::string probe_mesh_fragment(std::string source) {
     if (!enhanced_rendering_available()) {
         return source;
     }
-    source.insert(
-        source.find('\n') + 1,
-        std::string(
-            "#if !defined(OPENRAC_SOLID) || defined(OPENRAC_HERO_FUR)\n"
-        ) + std::string(shaders::environment_glsl)
-            + "\n#endif\n"
-    );
+    source.insert(source.find('\n') + 1, shaders::environment_glsl);
     source += std::string("\n#if !defined(OPENRAC_SOLID) && !defined(OPENRAC_COLOUR_SPECIALISED)\n")
               + std::string(shaders::chrome_glsl) + "\n#endif\n";
     return probe_shader_source(std::move(source));
@@ -148,13 +142,7 @@ std::string probe_early_fragment(std::string source) {
         return probe_mesh_fragment(std::move(source));
     }
     source += shaders::early_lighting_glsl;
-    source.insert(
-        source.find('\n') + 1,
-        std::string(
-            "#if !defined(OPENRAC_SOLID) || defined(OPENRAC_HERO_FUR)\n"
-        ) + std::string(shaders::environment_glsl)
-            + "\n#endif\n"
-    );
+    source.insert(source.find('\n') + 1, shaders::environment_glsl);
     source += std::string("\n#if !defined(OPENRAC_SOLID) && !defined(OPENRAC_COLOUR_SPECIALISED)\n")
               + std::string(shaders::chrome_glsl) + "\n#endif\n";
     source.insert(source.find('\n') + 1, "#define OPENRAC_EARLY_LIGHTING 1\n");
