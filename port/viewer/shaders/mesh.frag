@@ -192,6 +192,23 @@ vec3 retail_ambient_floor(vec3 indirect, vec3 ambient) {
     return indirect + floor_linear * (deficit / wanted) * 3.14159265359;
 }
 
+vec3 dielectric_surface(vec3 diffuse, vec3 indirect, vec3 n, vec3 toward_camera,
+                        vec4 selector, float visibility) {
+    if (probe_mode != 1 || translucent_pass != 0 || effect_pass != 0
+        || material_dielectric.x <= 0. || material_dielectric.z <= 0.) {
+        return diffuse;
+    }
+    vec3 eye = probe_unit(toward_camera);
+    float f0 = material_dielectric.y;
+    float roughness = material_dielectric.x;
+    float nv = dot(n, eye);
+    vec3 broad = gi_specular_fallback(indirect, nv, f0);
+    vec3 specular = environment_specular(v_world_position, n, eye, roughness, f0, broad)
+        + surface_specular_direct(v_world_position, n, eye, selector, visibility, roughness, vec3(f0));
+    return diffuse * (1. - dielectric_fresnel(nv, f0))
+        + specular * material_dielectric_tint * material_dielectric.z;
+}
+
 vec3 probe_surface(vec4 texel, vec3 original) {
 #ifdef OPENRAC_HERO_FUR
     if (hero_fur_debug > 0 && hero_fur_debug < 3 && v_hero_fur != 0 && v_glow == 0 && probe_effect == 0 && metal_pass == 0) {
@@ -303,16 +320,18 @@ vec3 probe_surface(vec4 texel, vec3 original) {
     // the same shadow floor. This also covers holes in probe coverage.
     // Legacy prelighting may already contain authored brightness. Preserve that
     // component while shadowing the remaining diffuse, without adding it twice.
-    vec3 fallback = wet_coat(
-        max(probe_linear(original) - emitted, vec3(0.0)) * fur_grain * mix(0.1, 1.0, visibility) * hero_cue,
-        surface_n, transpose(mat3(view)) * (-eye_position), visibility
-    ) + fur_direct + emitted;
+    vec3 fallback_diffuse = max(probe_linear(original) - emitted, vec3(0.0))
+        * fur_grain * mix(0.1, 1.0, visibility) * hero_cue;
+    vec3 toward_camera = transpose(mat3(view)) * (-eye_position);
+    vec4 selector = probe_receiver == 1 ? vec4(0.) : v_probe_selector;
     if (probe_mode == 0) {
+        vec3 fallback = wet_coat(fallback_diffuse, surface_n, toward_camera, visibility)
+            + fur_direct + emitted;
 #ifdef OPENRAC_FOLIAGE
         if (foliage) {
-            vec4 selector = probe_receiver == 2 ? v_probe_selector : vec4(0.);
-            vec3 direct = foliage_surface(v_world_position, n, transpose(mat3(view)) * (-eye_position),
-                albedo, vec3(0.), selector, visibility, leaf, v_uv);
+            vec4 foliage_selector = probe_receiver == 2 ? v_probe_selector : vec4(0.);
+            vec3 direct = foliage_surface(v_world_position, n, toward_camera,
+                albedo, vec3(0.), foliage_selector, visibility, leaf, v_uv);
             return probe_display(foliage_debug != 0 ? direct : max(fallback, direct + emitted));
         }
 #endif
@@ -325,7 +344,6 @@ vec3 probe_surface(vec4 texel, vec3 original) {
     }
     vec3 indirect;
     // Use the same smooth receiver normal as the depth/normal prepass and early lighting.
-    vec3 toward_camera = transpose(mat3(view)) * (-eye_position);
     vec3 surface_bias = probe_surface_bias(n, toward_camera);
 #ifdef OPENRAC_EARLY_LIGHTING
     indirect = cached_lighting.rgb;
@@ -342,6 +360,11 @@ vec3 probe_surface(vec4 texel, vec3 original) {
         return vec3(0.0);
     }
     if (!covered && probe_mode != 3) {
+        // Direct lights and reflection captures have their own coverage. Only the broad
+        // irradiance-based reflection fallback is unavailable here.
+        vec3 surface = dielectric_surface(fallback_diffuse, vec3(0.), surface_n, toward_camera,
+                                          selector, visibility);
+        vec3 fallback = wet_coat(surface, surface_n, toward_camera, visibility) + fur_direct + emitted;
 #ifdef OPENRAC_HERO_FUR
         // A local capture can illuminate the fur even where diffuse probe coverage is absent.
         if (v_hero_fur != 0 && hero_fur_lighting_enabled != 0) {
@@ -365,7 +388,6 @@ vec3 probe_surface(vec4 texel, vec3 original) {
         indirect *= texelFetch(gtao_visibility, pixel, 0).r;
     }
 #endif
-    vec4 selector = probe_receiver == 1 ? vec4(0.0) : v_probe_selector;
 #ifdef OPENRAC_FOLIAGE
     if (foliage) {
         vec3 colour = foliage_surface(v_world_position, n, toward_camera, albedo, indirect,
@@ -412,23 +434,10 @@ vec3 probe_surface(vec4 texel, vec3 original) {
     }
 #endif
     vec3 diffuse = albedo * illumination * material_diffuse_scale;
-    vec3 specular = vec3(0.);
-    if (probe_mode == 1 && translucent_pass == 0 && effect_pass == 0
-        && material_dielectric.x > 0. && material_dielectric.z > 0.) {
-        vec3 eye = probe_unit(toward_camera);
-        float f0 = material_dielectric.y;
-        float roughness = material_dielectric.x;
-        float fresnel = dielectric_fresnel(dot(surface_n, eye), f0);
-        diffuse *= 1. - fresnel;
-        vec3 broad = gi_specular_fallback(indirect, dot(surface_n, eye), f0);
-        specular = (environment_specular(v_world_position, surface_n, eye, roughness, f0, broad)
-            + surface_specular_direct(v_world_position, surface_n, eye, selector, visibility,
-                                      roughness, vec3(f0)))
-            * material_dielectric_tint * material_dielectric.z;
-    }
+    vec3 surface = dielectric_surface(diffuse, indirect, surface_n, toward_camera, selector, visibility);
     // Emission is independent of GI exposure, AO and shadow visibility.
     return probe_display(
-        wet_coat(diffuse + rim + specular, surface_n, toward_camera, visibility)
+        wet_coat(surface + rim, surface_n, toward_camera, visibility)
         + fur_direct + fur_indirect
         + (probe_mode == 1 ? emitted : vec3(0.0))
     );
