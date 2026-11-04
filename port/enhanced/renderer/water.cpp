@@ -19,6 +19,7 @@
 #include "enhanced/renderer/local_lights.h"
 #include "enhanced/renderer/reflection_material.h"
 #include "enhanced/renderer/water_internal.h"
+#include "enhanced/viewer/scene_lighting.h"
 #include "enhanced_viewer_shaders.h"
 #include "renderer/colour_graph.h"
 #include "renderer/gl.h"
@@ -273,6 +274,11 @@ void Water::bind(
         material.roughness = ocean.roughness;
         material.reflectivity = ocean.reflectivity;
         material.strength = ocean.reflection_strength;
+        if (auto* lighting = lighting::scene_lighting(m_scene)) {
+            const auto& optics = lighting->materials().ocean_optics();
+            material.roughness = optics.roughness.value_or(material.roughness);
+            material.reflectivity = optics.reflectivity.value_or(material.reflectivity);
+        }
         glUniform3f(
             shader.uniform("water_ocean_colour"), ocean.colour[0], ocean.colour[1], ocean.colour[2]
         );

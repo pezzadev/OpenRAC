@@ -227,6 +227,7 @@ struct State {
     bool material_settings = false;  // Unified authoring window, independent of Enhanced Settings.
     bool material_preset_edit = false;   // Shared preset editing instead of one object slot.
     std::string material_preset;         // Stable preset id, revalidated after level changes.
+    int material_library_preset = -1;
     std::size_t material_selection = 0;  // Current immutable binding row, revalidated on each draw.
     std::uint32_t material_model = ~0u;  // Pending click-picker model, or none.
     int material_slot = -1;              // Pending click-picker material.

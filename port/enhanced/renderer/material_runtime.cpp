@@ -110,6 +110,7 @@ void MaterialRuntime::clear() {
     m_baseline.reset();
     m_editor.reset();
     m_responses.clear();
+    m_ocean_optics = {};
     m_author = {};
     m_edits = {};
     m_path.clear();
@@ -147,9 +148,18 @@ void MaterialRuntime::publish(std::shared_ptr<const scene::MaterialBindings> bin
     editor->dirty = !m_edits.rules.empty() || !m_edits.presets.empty();
     editor->transport_dirty = editor->bindings->transport_stamp != m_transport_baseline;
     // Existing water rendering consumes one shared appearance; simulation state remains independently owned.
+    m_ocean_optics = {};
     for (std::size_t n = 0; n < responses.size(); ++n) {
         if (editor->bindings->assets->sources[n].identity.material_name == "@water") {
             set_reflection_material_settings(ReflectionSurface::Water, responses[n].reflection);
+            const auto& properties = editor->bindings->bindings[n].values.properties;
+            if (properties.contains("ocean.roughness")) {
+                m_ocean_optics.roughness = materials::number_value(properties, "ocean.roughness", .22f);
+            }
+            if (properties.contains("ocean.reflectivity")) {
+                m_ocean_optics.reflectivity =
+                    materials::number_value(properties, "ocean.reflectivity", .02037f);
+            }
         }
     }
     m_responses = std::move(responses);
@@ -157,12 +167,15 @@ void MaterialRuntime::publish(std::shared_ptr<const scene::MaterialBindings> bin
 }
 
 Result<void> MaterialRuntime::patch(std::size_t binding, std::string key, materials::Value value) {
+    return patch(binding, {{std::move(key), std::move(value)}});
+}
+
+Result<void> MaterialRuntime::patch(std::size_t binding, materials::Properties properties) {
     try {
         if (!m_editor || !m_editor->bindings || binding >= m_editor->bindings->bindings.size()) {
             return unexpected(Error{"material selection is unavailable"});
         }
-        materials::Properties property{{key, value}};
-        const auto valid = materials::validate(property);
+        const auto valid = materials::validate(properties);
         if (!valid) {
             return unexpected(valid.error());
         }
@@ -170,7 +183,10 @@ Result<void> MaterialRuntime::patch(std::size_t binding, std::string key, materi
         auto rule = edit_rule(m_editor->bindings->assets->sources[binding]);
         const auto id = rule.id;
         edits.rules.try_emplace(id, std::move(rule));
-        edits.rules.at(id).properties[key] = std::move(value);
+        auto& fields = edits.rules.at(id).properties;
+        for (auto& [key, value] : properties) {
+            fields.insert_or_assign(key, std::move(value));
+        }
         return preview(std::move(edits));
     } catch (const std::exception& error) {
         return unexpected(Error{error.what()});

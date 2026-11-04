@@ -259,6 +259,9 @@ std::shared_ptr<const enhanced::MaterialEditor> material_editor();
 bool patch_material(
     std::size_t binding, std::string key, materials::Value value, std::string& error
 );
+bool patch_material(
+    std::size_t binding, materials::Properties properties, std::string& error
+);
 // Applies one shared preset field with the same scene ownership and validation as object edits.
 bool patch_material_preset(
     const std::string& preset, std::string key, materials::Value value, std::string& error

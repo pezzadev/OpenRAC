@@ -1212,6 +1212,11 @@ bool patch_material(
            && material_edit_result(editor->patch(binding, std::move(key), std::move(value)), error);
 }
 
+bool patch_material(std::size_t binding, materials::Properties properties, std::string& error) {
+    auto* editor = editable_materials(error);
+    return editor && material_edit_result(editor->patch(binding, std::move(properties)), error);
+}
+
 bool patch_material_preset(
     const std::string& preset, std::string key, materials::Value value, std::string& error
 ) {

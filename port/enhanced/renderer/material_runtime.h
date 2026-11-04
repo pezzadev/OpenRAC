@@ -47,6 +47,11 @@ struct MaterialEditor {
     bool transport_dirty = false;      // Effective static lighting changed.
 };
 
+struct OceanOpticsOverride {
+    std::optional<float> roughness;
+    std::optional<float> reflectivity;
+};
+
 // Scene-owned cache; callers edit only after render completion, matching LevelScene's ownership handoff.
 class MaterialRuntime {
 public:
@@ -61,8 +66,10 @@ public:
     // Returns cached surface/response/variant or the caller's legacy fallback.
     [[nodiscard]] const scene::MaterialBinding* find(std::uint32_t model, int material) const;
     [[nodiscard]] const MaterialResponse* response(std::uint32_t model, int material) const;
+    [[nodiscard]] const OceanOpticsOverride& ocean_optics() const { return m_ocean_optics; }
     // Applies one sparse object-type/slot property, rejecting the whole edit on validation errors.
     [[nodiscard]] Result<void> patch(std::size_t binding, std::string key, materials::Value value);
+    [[nodiscard]] Result<void> patch(std::size_t binding, materials::Properties properties);
     // Applies one shared preset field to every matching binding, using the same validation as object edits.
     [[nodiscard]] Result<void> patch_preset(
         const std::string& preset, std::string key, materials::Value value
@@ -93,6 +100,7 @@ private:
         m_transport_baseline;  // Loaded transport identity, unchanged by saving appearance edits.
     std::filesystem::path m_path;               // Authoring target from source precedence.
     std::vector<MaterialResponse> m_responses;  // Parallel to resolved scene bindings.
+    OceanOpticsOverride m_ocean_optics;
 };
 
 // Compiles one resolved property map, preserving the existing defaults for missing fields.

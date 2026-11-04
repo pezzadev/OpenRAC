@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "debug/overlay.h"
+#include "debug/material_presets.h"
 #include "enhanced/renderer/foliage.h"
 #include "enhanced/renderer/material_runtime.h"
 #include "frontend.h"
@@ -184,6 +185,145 @@ void show_visor_defaults(materials::Properties& properties, const scene::Materia
     properties.try_emplace("glass.tint", colour(response.glass.tint));
 }
 
+const char* preset_group(PresetSurface surface) {
+    switch (surface) {
+        case PresetSurface::Opaque: return "Opaque surfaces";
+        case PresetSurface::Metal: return "Bare metals";
+        case PresetSurface::Glass: return "Thin glass";
+        case PresetSurface::Water:
+        case PresetSurface::Ocean: return "Water";
+        case PresetSurface::Foliage: return "Foliage";
+        case PresetSurface::DryFur:
+        case PresetSurface::WetFur: return "Fur";
+    }
+    return "";
+}
+
+const char* preset_requirement(PresetSurface surface, const materials::Identity& identity) {
+    const bool water = identity.material_name == "@water";
+    switch (surface) {
+        case PresetSurface::Opaque:
+        case PresetSurface::Foliage:
+            return !water && !identity.metal && identity.layer != "sky"
+                       ? nullptr : "Select a regular colour material.";
+        case PresetSurface::Metal:
+            return identity.metal && identity.material_name == "metal_chrome"
+                       ? nullptr : "Select a chrome packet, such as Clank's bare metal.";
+        case PresetSurface::Glass:
+            return identity.material_name == enhanced::kShipVisorMaterial
+                       ? nullptr : "Select a thin ship visor pane.";
+        case PresetSurface::Water:
+        case PresetSurface::Ocean:
+            return water ? nullptr : "Select the level's water material.";
+        case PresetSurface::DryFur:
+        case PresetSurface::WetFur:
+            for (const auto* profile : {&enhanced::rac1_fur_profile(), &enhanced::rac2_fur_profile()}) {
+                if (identity.layer == "moby" && !identity.metal && identity.class_id == profile->class_id
+                    && identity.material_name == profile->material) {
+                    return nullptr;
+                }
+            }
+            return "Select Ratchet's fur material. The renderer verifies the coat coverage.";
+    }
+    return "Select a compatible material.";
+}
+
+materials::Properties preset_properties(const MaterialPreset& preset) {
+    using Colour = std::array<double, 3>;
+    if (preset.surface == PresetSurface::Ocean) {
+        return {{"ocean.roughness", preset.roughness}, {"ocean.reflectivity", preset.reflectivity}};
+    }
+    if (preset.surface == PresetSurface::DryFur) {
+        const enhanced::FurMaterialSettings fur;
+        return {{"fur.enabled", fur.enabled}, {"fur.strength", double(fur.strength)},
+                {"fur.contrast", double(fur.contrast)}, {"fur.fade_distance", double(fur.fade_distance)},
+                {"fur.lighting_enabled", fur.lighting_enabled}, {"fur.highlight", double(fur.highlight)},
+                {"fur.softness", double(fur.softness)}, {"fur.directionality", double(fur.directionality)},
+                {"fur.scattering", double(fur.scattering)},
+                {"fur.environment_strength", double(fur.environment_strength)}};
+    }
+    if (preset.surface == PresetSurface::WetFur) {
+        const enhanced::WetnessMaterialSettings wet;
+        return {{"wetness.diffuse_scale", double(wet.diffuse_scale)},
+                {"wetness.specular_strength", double(wet.specular_strength)},
+                {"wetness.dry_roughness", double(wet.dry_roughness)},
+                {"wetness.wet_roughness", double(wet.wet_roughness)},
+                {"wetness.reflectivity", double(wet.reflectivity)}};
+    }
+    materials::Properties properties{
+        {"surface.roughness", preset.roughness}, {"surface.reflectivity", preset.reflectivity},
+        {"reflection.strength", 1.}, {"reflection.tint", Colour{1, 1, 1}},
+    };
+    switch (preset.surface) {
+        case PresetSurface::Opaque:
+            properties["shading"] = std::string("standard");
+            break;
+        case PresetSurface::Metal: {
+            const auto& [r, g, b] = preset.colour;
+            const double f0 = std::max({r, g, b});
+            properties["shading"] = std::string("chrome");
+            properties["surface.reflectivity"] = f0;
+            properties["reflection.tint"] = Colour{r / f0, g / f0, b / f0};
+            properties["reflection.opacity"] = 1.;
+            break;
+        }
+        case PresetSurface::Glass:
+            properties["shading"] = std::string("glass");
+            properties["reflection.opacity"] = 1.;
+            properties["glass.transmission"] = preset.transmission;
+            properties["glass.tint"] = preset.colour;
+            break;
+        case PresetSurface::Water:
+            properties["shading"] = std::string("water");
+            break;
+        case PresetSurface::Foliage:
+            properties["shading"] = std::string("foliage");
+            properties["foliage.transmission"] = preset.transmission;
+            properties["foliage.thickness"] = .7;
+            properties["foliage.normal_bend"] = .2;
+            break;
+        default:
+            break;
+    }
+    return properties;
+}
+
+void library_controls(const materials::Identity& identity) {
+    auto& selection = s.material_library_preset;
+    if (ImGui::BeginCombo("Preset library", selection < 0 ? "Choose a finish" : kMaterialPresets[selection].name)) {
+        std::string_view last_group;
+        for (int i = 0; i < static_cast<int>(std::size(kMaterialPresets)); ++i) {
+            const auto& preset = kMaterialPresets[i];
+            const std::string_view group = preset_group(preset.surface);
+            if (group != last_group) {
+                ImGui::TextDisabled("%s", group.data());
+                last_group = group;
+            }
+            if (ImGui::Selectable(preset.name, i == selection)) {
+                selection = i;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", preset.description);
+            }
+        }
+        ImGui::EndCombo();
+    }
+    if (selection < 0) {
+        return;
+    }
+    const auto& preset = kMaterialPresets[selection];
+    ImGui::TextWrapped("%s", preset.description);
+    const auto* requirement = preset_requirement(preset.surface, identity);
+    if (requirement) {
+        ImGui::TextDisabled("%s", requirement);
+    }
+    ImGui::BeginDisabled(requirement != nullptr);
+    if (ImGui::Button("Apply preset to material")) {
+        frontend::patch_material(s.material_selection, preset_properties(preset), s.material_error);
+    }
+    ImGui::EndDisabled();
+}
+
 // Shows exact provenance and sends only changed properties; validation failures leave all previous bindings intact.
 void binding_controls(const scene::MaterialBindings& bindings) {
     const auto& binding = bindings.bindings[s.material_selection];
@@ -216,9 +356,13 @@ void binding_controls(const scene::MaterialBindings& bindings) {
     }
     ImGui::Text("Layer: %s | Class: %d", source.identity.layer.c_str(), source.identity.class_id);
     ImGui::TextWrapped("Edits apply to every instance of this model and material slot.");
+    library_controls(source.identity);
     for (const auto& field : materials::fields()) {
         // The sky shader consumes only tint.
         if (sky && field.path != "surface.tint") {
+            continue;
+        }
+        if (!water && field.path.starts_with("ocean.")) {
             continue;
         }
         const auto found = properties.find(field.path);

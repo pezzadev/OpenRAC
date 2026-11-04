@@ -23,6 +23,8 @@ constexpr Field kFields[] = {
     {"reflection.opacity", "Reflection opacity", Kind::Number, 0, 1, false},
     {"glass.transmission", "Transmission", Kind::Number, 0, 1, false},
     {"glass.tint", "Transmission tint", Kind::Colour, 0, 1, false},
+    {"ocean.roughness", "Ocean roughness", Kind::Number, 0.04, 1, false},
+    {"ocean.reflectivity", "Ocean reflectivity (F0)", Kind::Number, 0, 1, false},
     {"emission.runtime_intensity",
      "Emission intensity",
      Kind::Number,

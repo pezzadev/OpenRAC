@@ -49,7 +49,11 @@ void test_transactional_preview(const std::filesystem::path& directory) {
     CHECK(runtime.response(1, 0)->reflection.roughness == .5f);
     const auto previous = runtime.editor();
     CHECK(!runtime.patch(0, "surface.roughness", 0.0));
+    CHECK(!runtime.patch(0, {{"surface.roughness", .3}, {"surface.reflectivity", 2.}}));
     CHECK(runtime.editor() == previous);
+    CHECK(runtime.patch(0, {{"surface.roughness", .75}, {"surface.reflectivity", .045}}));
+    CHECK(runtime.response(0, 0)->reflection.reflectivity == .045f);
+    CHECK(runtime.response(1, 0)->reflection.reflectivity == .04f);
     CHECK(runtime.patch_preset("shared", "surface.roughness", .9));
     CHECK(runtime.response(0, 0)->reflection.roughness == .75f);
     CHECK(runtime.response(1, 0)->reflection.roughness == .9f);
@@ -58,6 +62,22 @@ void test_transactional_preview(const std::filesystem::path& directory) {
     CHECK(runtime.response(0, 0)->reflection.roughness == .9f);
     runtime.reset();
     CHECK(runtime.response(0, 0)->reflection.roughness == .5f && !runtime.editor()->dirty);
+}
+
+void test_ocean_preset(const std::filesystem::path& directory) {
+    scene::LevelData source;
+    source.dir = directory;
+    enhanced::MaterialRuntime runtime;
+    CHECK(runtime.load(source));
+    CHECK(runtime.editor()->bindings->assets->sources[0].identity.material_name == "@water");
+    CHECK(runtime.patch(0, {{"ocean.roughness", .16}, {"ocean.reflectivity", .020}}));
+    CHECK(runtime.ocean_optics().roughness == .16f);
+    CHECK(runtime.ocean_optics().reflectivity == .020f);
+    CHECK(enhanced::reflection_material_settings(enhanced::ReflectionSurface::Water).roughness
+          == .22f);
+    CHECK(!runtime.editor()->transport_dirty);
+    runtime.reset();
+    CHECK(!runtime.ocean_optics().roughness && !runtime.ocean_optics().reflectivity);
 }
 
 // Independent cached optical records reset inherited values instead of leaking the previous object's edits.
@@ -229,6 +249,7 @@ int main() {
         test_exact_slots(directory);
         test_preview_and_save_share_author_priority(directory);
         test_transactional_preview(directory);
+        test_ocean_preset(directory);
         test_optical_override_isolation(directory);
         test_sparse_atomic_save(directory);
         test_export_identity();
