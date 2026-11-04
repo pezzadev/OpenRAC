@@ -212,6 +212,11 @@ void SceneLighting::bind_material(
     const renderer::Shader& shader, std::uint32_t model, int slot, const scene::Material& source
 ) const {
     bind_surface_material(shader, model, slot, source);
+    const bool visor = source.name == enhanced::kShipVisorMaterial;
+    // The generated pane has no original-mode draw.
+    gl::glUniform1i(
+        shader.uniform("object_thin_glass"), visor ? (m_material_overrides ? 1 : 2) : 0
+    );
     const auto location = shader.uniform("object_reflection_enabled");
     if (location < 0) {
         return;
@@ -231,6 +236,17 @@ void SceneLighting::bind_material(
     const int class_id = found != m_reflection_classes.end() ? found->second : -1;
     const auto material =
         response ? response->reflection : enhanced::reflection_material_for(source.name, class_id);
+    // Only the generated pane reads the transmission parameters.
+    if (visor) {
+        const auto glass = response ? response->glass : enhanced::ThinGlassSettings{};
+        gl::glUniform4f(
+            shader.uniform("object_glass_transmission"),
+            glass.tint[0],
+            glass.tint[1],
+            glass.tint[2],
+            glass.transmission
+        );
+    }
     gl::glUniform3f(
         shader.uniform("object_reflection_material"),
         material.roughness,

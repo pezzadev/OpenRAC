@@ -66,6 +66,8 @@ void test_optical_override_isolation(const std::filesystem::path& directory) {
     CHECK(runtime.load(level(directory)));
     CHECK(runtime.patch(0, "wetness.diffuse_scale", .1));
     CHECK(runtime.patch(0, "fur.strength", .7));
+    CHECK(runtime.patch(0, "glass.transmission", .65));
+    CHECK(runtime.patch(0, "glass.tint", (std::array<double, 3>{.2, .3, .4})));
     CHECK(runtime.response(0, 0)->wetness.diffuse_scale == .1f);
     CHECK(
         runtime.response(1, 0)->wetness.diffuse_scale
@@ -73,6 +75,10 @@ void test_optical_override_isolation(const std::filesystem::path& directory) {
     );
     CHECK(runtime.response(0, 0)->fur.strength == .7f);
     CHECK(runtime.response(1, 0)->fur.strength == enhanced::FurMaterialSettings{}.strength);
+    CHECK(runtime.response(0, 0)->glass.transmission == .65f);
+    CHECK((runtime.response(0, 0)->glass.tint == std::array{.2f, .3f, .4f}));
+    CHECK(runtime.response(1, 0)->glass.transmission == enhanced::ThinGlassSettings{}.transmission);
+    CHECK(!runtime.editor()->transport_dirty);
 }
 
 // Saved JSON roundtrips exactly and never contains the loaded shared catalog or unrelated original defaults.

@@ -21,6 +21,8 @@ constexpr Field kFields[] = {
     {"reflection.strength", "Reflection strength", Kind::Number, 0, 4, false},
     {"reflection.tint", "Reflection tint", Kind::Colour, 0, 1, false},
     {"reflection.opacity", "Reflection opacity", Kind::Number, 0, 1, false},
+    {"glass.transmission", "Transmission", Kind::Number, 0, 1, false},
+    {"glass.tint", "Transmission tint", Kind::Colour, 0, 1, false},
     {"emission.runtime_intensity",
      "Emission intensity",
      Kind::Number,

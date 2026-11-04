@@ -76,6 +76,8 @@ MaterialResponse material_response(
     }
     result.sky_tint = materials::colour_value(properties, "surface.tint", result.sky_tint);
     result.reflection = reflection_response(source, properties);
+    result.glass.transmission = number(properties, "glass.transmission", result.glass.transmission);
+    result.glass.tint = materials::colour_value(properties, "glass.tint", result.glass.tint);
     const auto reflection = properties.lower_bound("reflection.");
     result.reflection_override =
         result.family_override || properties.contains("surface.roughness")

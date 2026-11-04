@@ -36,6 +36,7 @@
 #include "enhanced/renderer/texture_upscale.h"
 #include "enhanced/renderer/water.h"
 #include "enhanced/viewer/scene_lighting.h"
+#include "enhanced/viewer/ship_visor.h"
 #include "frontend.h"
 #include "game/common/frontend/draw_coverage.h"
 #include "game/common/frontend/effects_dump.h"
@@ -313,6 +314,9 @@ void use_level(int number) {
         } else {
             log::warn("mods: prop mesh {}: {}", mesh.string(), why);
         }
+    }
+    if (gl::enhanced_rendering_available() && g->game == "rac1-ntsc") {
+        lighting::add_ship_visor(g->level);
     }
     enhanced::install_texture_upscaler(g->renderer->textures());
     crash::level_breadcrumb("level scene upload", wanted);

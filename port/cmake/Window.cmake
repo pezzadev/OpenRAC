@@ -456,6 +456,7 @@ add_library(openrac_enhanced_viewer STATIC
   enhanced/viewer/probe_sphere_instances.cpp
   enhanced/renderer/local_lights.cpp
   enhanced/viewer/scene_lighting.cpp
+  enhanced/viewer/ship_visor.cpp
 )
 if(OPENRAC_LIGHT_AUTHORING)
   target_sources(openrac_enhanced_viewer PRIVATE

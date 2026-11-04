@@ -14,10 +14,17 @@
 #include "scene/material_overrides.h"
 
 namespace openrac::enhanced {
+// Straight-through transmission for a thin pane, with a linear RGB colour veil.
+struct ThinGlassSettings {
+    std::array<float, 3> tint{.05f, .15f, .22f};  // Linear colour of the veil.
+    float transmission = .9f;                     // Fraction of clear background before Fresnel.
+};
+
 // Typed responses compiled at load/edit, never interpreted from JSON during drawing.
 struct MaterialResponse {
     std::array<float, 3> sky_tint{1, 1, 1};  // RGB multiplier for the separate sky pass.
     ReflectionMaterialSettings reflection;   // Original reflection family with supplied overrides.
+    ThinGlassSettings glass;                 // Thin panes consume these transmission controls.
     FurMaterialSettings fur;                 // Applied only to verified coverage by HeroFur.
     WetnessMaterialSettings wetness;         // Applied only to HeroWetness's verified vertices.
     int fallback_channels = 0;               // Bit 0 diffuse scale, bit 1 authored emission.

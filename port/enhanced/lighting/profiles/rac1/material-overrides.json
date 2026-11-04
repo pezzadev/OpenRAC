@@ -158,6 +158,22 @@
       "preset": "glass"
     },
     {
+      "id": "ship-visor",
+      "name": "Ship visor",
+      "match": {
+        "layer": "moby",
+        "material_name": "metal_glass_ship_visor",
+        "pass": "metal"
+      },
+      "preset": "glass",
+      "set": {
+        "glass": {
+          "transmission": 0.9,
+          "tint": [0.05, 0.15, 0.22]
+        }
+      }
+    },
+    {
       "id": "stylised",
       "match": {
         "material_name": "metal_stylised",

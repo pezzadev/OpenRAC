@@ -168,13 +168,34 @@ void binding_combo(const scene::MaterialBindings& bindings) {
     ImGui::EndCombo();
 }
 
+// Older exports still expose the visor's compiled defaults as sparse material edits.
+void show_visor_defaults(materials::Properties& properties, const scene::MaterialSource& source) {
+    const auto response = enhanced::material_response(source, properties);
+    const auto& reflection = response.reflection;
+    const auto colour = [](const std::array<float, 3>& rgb) {
+        return std::array<double, 3>{rgb[0], rgb[1], rgb[2]};
+    };
+    properties.try_emplace("surface.roughness", double(reflection.roughness));
+    properties.try_emplace("surface.reflectivity", double(reflection.reflectivity));
+    properties.try_emplace("reflection.strength", double(reflection.strength));
+    properties.try_emplace("reflection.opacity", double(reflection.opacity));
+    properties.try_emplace("reflection.tint", colour(reflection.tint));
+    properties.try_emplace("glass.transmission", double(response.glass.transmission));
+    properties.try_emplace("glass.tint", colour(response.glass.tint));
+}
+
 // Shows exact provenance and sends only changed properties; validation failures leave all previous bindings intact.
 void binding_controls(const scene::MaterialBindings& bindings) {
     const auto& binding = bindings.bindings[s.material_selection];
     const auto& source = bindings.assets->sources[s.material_selection];
     const bool water = source.identity.material_name == "@water";
     const bool sky = source.identity.layer == "sky";
-    auto properties = water ? binding.values.properties : displayed_properties(binding);
+    const bool visor = source.identity.material_name == enhanced::kShipVisorMaterial;
+    auto properties = water || visor ? binding.values.properties : displayed_properties(binding);
+    // Transmission applies only to the thin pane's blended pass.
+    if (visor) {
+        show_visor_defaults(properties, source);
+    }
     // Older exports have no authored water fields, but still use the renderer defaults.
     if (water) {
         const auto defaults =

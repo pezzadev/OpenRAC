@@ -104,6 +104,12 @@ spilling onto equipment. Shared vertices between fur and excluded islands are re
 and live-palette checks exclude attachments, other materials and UI copies. Diagnostics are
 session-only and default off.
 
+## Thin glass
+
+In enhanced mode, the verified NTSC-U Veldin and green ships have panes fitted to their animated canopies.
+Select `metal_glass_ship_visor` in the Material Inspector to edit reflections, clear transmission
+and its linear RGB tint. These settings affect the live draw and can be saved as material overrides.
+
 ## Foliage
 
 Enhanced Vulkan supports reviewed thin-leaf materials through `material-overrides.json`. Texture-content hashes select materials; ordinary cutouts,
