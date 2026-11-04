@@ -184,6 +184,18 @@ void SceneLighting::bind_surface_material(
         gl::glUniform1i(
             shader.uniform("material_fallback"), response ? response->fallback_channels : 0
         );
+        const auto dielectric = shader.uniform("material_dielectric");
+        if (dielectric >= 0) {
+            const bool enabled = response && response->dielectric_specular;
+            gl::glUniform3f(dielectric, enabled ? response->reflection.roughness : 0.f,
+                            enabled ? response->reflection.reflectivity : 0.f,
+                            enabled ? response->reflection.strength : 0.f);
+            if (enabled) {
+                gl::glUniform3f(shader.uniform("material_dielectric_tint"),
+                                response->reflection.tint[0], response->reflection.tint[1],
+                                response->reflection.tint[2]);
+            }
+        }
         // Catalog families override the legacy foliage adapter only when explicitly authored.
         if (response && response->family_override) {
             gl::glUniform1f(
@@ -228,6 +240,8 @@ void SceneLighting::bind_material(
     const bool enabled =
         m_material_overrides && source.metal && (active() || reflection == kAuthoredReflection);
     gl::glUniform1i(location, enabled ? reflection : 0);
+    const bool conductor = response ? response->conductor : source.name == "metal_chrome";
+    gl::glUniform1i(shader.uniform("object_conductor"), enabled && conductor ? 1 : 0);
     // Only reflective packets consume these uniforms.
     if (!source.metal) {
         return;

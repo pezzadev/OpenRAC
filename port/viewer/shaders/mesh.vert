@@ -59,6 +59,7 @@ uniform vec4 terrain_point_lights[16];
 // alpha the moby's distance gives (ReRAC moby_skinning_lighting.md 6 and 9).
 uniform int metal_pass;
 uniform int object_thin_glass;
+uniform int object_conductor;
 // 1: clip-space z goes to the window as it is (renderer/precise_depth.h), 0: GL's (z + w) / 2.
 uniform int clip_zero_to_one;
 uniform int probe_mode;
@@ -276,6 +277,14 @@ void main() {
         float centre = -(view * model[3]).z;
         float shine = clamp((reach - centre) / 16.0, 0.0, 1.0);
         v_colour = vec4(vec3(112.0 / 128.0), shine);
+#ifdef OPENRAC_ENHANCED_RENDERING
+        // Enhanced conductors use the packet geometry as coverage. Distance is a property of
+        // the retail sphere-map effect, so only the moby's own fade applies to this surface.
+        if (object_conductor != 0 && probe_mode == 1 && probe_receiver == 2
+            && v_probe_selector.w < 1.5) {
+            v_colour.a = tint.a;
+        }
+#endif
         // MobyProc's pull toward the camera (GS Z + 1000 Q): a little nearer, so the shine is not
         // lost to the moby's own surface under it (reversed depth: larger is nearer). 0.5e-4 of the
         // window either way: GL's form halves the clip-space z it is given, precise depth does not.

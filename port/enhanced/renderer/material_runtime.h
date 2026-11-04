@@ -32,6 +32,8 @@ struct MaterialResponse {
     bool wetness_override = false;     // Explicit wetness fields select cached authored response.
     bool reflection_override = false;  // Authored optical fields can use the retail fallback.
     bool family_override = false;      // Explicit catalog family, including standard opt-outs.
+    bool conductor = false;
+    bool dielectric_specular = false;
     std::array<std::uint32_t, 2> foliage{};  // Existing packed optical controls.
 };
 

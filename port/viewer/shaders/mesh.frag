@@ -116,9 +116,12 @@ vec3 surface_emission(vec4 texel) {
 }
 
 uniform int object_reflection_enabled;
+uniform int object_conductor;
 uniform vec3 object_reflection_material; // Perceptual roughness, F0, reflection strength.
 uniform vec4 object_reflection_tint; // Linear tint and authored-opacity multiplier.
-vec4 chrome_surface(vec3 original);
+uniform vec3 material_dielectric; // Roughness (zero disables), F0, specular strength.
+uniform vec3 material_dielectric_tint;
+vec4 chrome_surface(vec3 original, bool conductor);
 vec4 thin_glass_surface();
 
 // probes.glsl is inserted after the version line by probe_mesh_fragment().
@@ -408,9 +411,24 @@ vec3 probe_surface(vec4 texel, vec3 original) {
         rim = gameplay_rim(indirect, eye_normal, -eye_position);
     }
 #endif
+    vec3 diffuse = albedo * illumination * material_diffuse_scale;
+    vec3 specular = vec3(0.);
+    if (probe_mode == 1 && translucent_pass == 0 && effect_pass == 0
+        && material_dielectric.x > 0. && material_dielectric.z > 0.) {
+        vec3 eye = probe_unit(toward_camera);
+        float f0 = material_dielectric.y;
+        float roughness = material_dielectric.x;
+        float fresnel = dielectric_fresnel(dot(surface_n, eye), f0);
+        diffuse *= 1. - fresnel;
+        vec3 broad = gi_specular_fallback(indirect, dot(surface_n, eye), f0);
+        specular = (environment_specular(v_world_position, surface_n, eye, roughness, f0, broad)
+            + surface_specular_direct(v_world_position, surface_n, eye, selector, visibility,
+                                      roughness, vec3(f0)))
+            * material_dielectric_tint * material_dielectric.z;
+    }
     // Emission is independent of GI exposure, AO and shadow visibility.
     return probe_display(
-        wet_coat(albedo * illumination * material_diffuse_scale + rim, surface_n, toward_camera, visibility)
+        wet_coat(diffuse + rim + specular, surface_n, toward_camera, visibility)
         + fur_direct + fur_indirect
         + (probe_mode == 1 ? emitted : vec3(0.0))
     );
@@ -462,6 +480,11 @@ void main() {
             m = thin_glass_surface();
             mrgb = m.rgb;
             m.a *= v_colour.a;
+        } else if (object_conductor != 0 && probe_mode == 1 && probe_receiver == 2
+                   && v_probe_selector.w < 1.5) {
+            m = chrome_surface(vec3(0.), true);
+            mrgb = m.rgb;
+            m.a *= v_colour.a;
         } else
 #endif
         {
@@ -469,7 +492,7 @@ void main() {
             m = vec4(vec3(mp_vec3(metal.rgb) * mp_vec3(v_colour.rgb)), metal.a * v_colour.a);
             mrgb = min(m.rgb, vec3(1.0));
 #if defined(OPENRAC_ENHANCED_RENDERING) && !defined(OPENRAC_COLOUR_SPECIALISED)
-            vec4 reflected = chrome_surface(mrgb);
+            vec4 reflected = chrome_surface(mrgb, false);
             mrgb = reflected.rgb;
             m.a *= reflected.a;
 #endif

@@ -1,32 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Authored chrome/glass packets use GGX direct highlights and box-projected environment light.
-vec3 chrome_direct(vec3 p,vec3 n,vec3 eye,vec4 selector,float visibility) {
-    int a=(int(selector.x+.5)&15)*4,b=(int(selector.y+.5)&15)*4;
-    float blend=clamp(selector.z,0.,1.);
-    vec3 result=vec3(0);
-    for(int light=0;light<2;++light) {
-        int offset=light*2;
-        vec3 radiance=max(mix(light_sets[a+offset].rgb,light_sets[b+offset].rgb,blend),vec3(0));
-        vec3 travel=probe_unit(mix(light_sets[a+offset+1].xyz,light_sets[b+offset+1].xyz,blend));
-        if(light==0) {
-            if(probe_sunlight_direction.w!=0.) travel=probe_sunlight_direction.xyz;
-            radiance*=probe_sunlight_scale;
-        }
-        result+=radiance*mix(.1,1.,visibility)*ggx_specular(n,eye,-travel,
-                    object_reflection_material.x,object_reflection_material.y);
-    }
-    LOCAL_LIGHT_LOOP(i) {
-        vec3 delta=LOCAL_POSITION(i).xyz-p;
-        float radius=LOCAL_POSITION(i).w,distance=length(delta);
-        if(radius<=0. || distance>=radius || distance<1e-6) continue;
-        vec3 radiance=max(LOCAL_COLOUR(i).rgb,vec3(0))*LOCAL_ATTENUATION(distance,radius)*LOCAL_CONE(i,delta/distance);
-        result+=radiance*ggx_specular(n,eye,delta/distance,
-                    object_reflection_material.x,object_reflection_material.y);
-    }
-    return result;
-}
-
-vec4 chrome_surface(vec3 original) {
+vec4 chrome_surface(vec3 original, bool conductor) {
     bool authored_fallback = probe_mode == 0 && object_reflection_enabled == 2;
     if (object_reflection_enabled == 0 || (probe_mode != 1 && !authored_fallback)
         || probe_receiver != 2 || v_probe_selector.w >= 1.5) return vec4(original, 1);
@@ -55,13 +29,22 @@ vec4 chrome_surface(vec3 original) {
     float visibility=min(sun_visibility,hero_visibility);
     // Reuse early GI, including its directional normal response and local occlusion.
     // Original chrome is reserved for receivers without either source of indirect lighting.
-    if (environment_count == 0 && !covered && !authored_fallback) return vec4(original, 1);
-    vec3 fallback=covered ? gi_specular_fallback(indirect*probe_gi_multiplier,
-                            dot(n,eye),object_reflection_material.y) : probe_linear(original);
-    vec3 reflection=environment_specular(v_world_position,n,eye,object_reflection_material.x,
-                        object_reflection_material.y,fallback);
-    reflection+=chrome_direct(v_world_position,n,eye,v_probe_selector,visibility);
-    reflection*=object_reflection_material.z*object_reflection_tint.rgb;
+    if (environment_count == 0 && !covered && !authored_fallback && !conductor) {
+        return vec4(original, 1);
+    }
+    float roughness = object_reflection_material.x;
+    vec3 f0 = vec3(object_reflection_material.y);
+    if (conductor) f0 *= object_reflection_tint.rgb;
+    vec3 fallback = probe_linear(original);
+    if (covered || conductor) {
+        vec3 radiance = covered ? max(indirect, vec3(0.)) * (probe_gi_multiplier / 3.14159265)
+                                : probe_linear(clamp(v_probe_ambient, 0., 1.));
+        fallback = radiance * surface_fresnel(dot(n, eye), f0);
+    }
+    vec3 reflection = environment_specular(v_world_position,n,eye,roughness,f0,fallback);
+    reflection += surface_specular_direct(v_world_position,n,eye,v_probe_selector,visibility,roughness,f0);
+    reflection *= object_reflection_material.z;
+    if (!conductor) reflection *= object_reflection_tint.rgb;
     return vec4(probe_display(reflection),object_reflection_tint.a);
 }
 
@@ -71,9 +54,8 @@ vec4 thin_glass_surface() {
     vec3 eye = probe_unit(transpose(mat3(view)) * eye_view);
     vec3 n = probe_unit(v_normal);
     if (dot(n, eye) < 0.) n = -n;
-    float grazing = 1. - clamp(dot(n, eye), 0., 1.);
     float f0 = object_reflection_material.y;
-    float fresnel = f0 + (1. - f0) * grazing*grazing*grazing*grazing*grazing;
+    float fresnel = dielectric_fresnel(dot(n, eye), f0);
     // The framebuffer supplies the clear transmitted scene via the destination blend factor.
     float reflected_weight = fresnel*object_reflection_tint.a;
     float tint_weight = (1.-object_glass_transmission.a)*(1.-reflected_weight);

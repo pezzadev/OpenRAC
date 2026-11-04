@@ -182,6 +182,20 @@ void test_family_defaults() {
     source.identity.metal = true;
     const auto response = enhanced::material_response(source, {{"shading", std::string("glass")}});
     CHECK(response.reflection.roughness == .08f && response.reflection.reflectivity == .04f);
+    CHECK(!response.conductor && !response.dielectric_specular);
+
+    source.identity.material_name = "metal_chrome";
+    source.identity.class_id = 87;
+    const auto chrome = enhanced::material_response(source, {});
+    CHECK(chrome.conductor && !chrome.dielectric_specular);
+    CHECK(chrome.reflection.roughness == .26f && chrome.reflection.reflectivity == .65f);
+    CHECK(!enhanced::material_response(source, {{"shading", std::string("stylised")}}).conductor);
+
+    source = {};
+    CHECK(!enhanced::material_response(source, {}).dielectric_specular);
+    const auto dielectric = enhanced::material_response(source, {{"surface.roughness", .32}});
+    CHECK(dielectric.dielectric_specular && !dielectric.conductor);
+    CHECK(dielectric.reflection.roughness == .32f && dielectric.reflection.reflectivity == .04f);
 }
 
 // Model filename extensions cannot suppress type selectors, and sky is never classified as terrain.

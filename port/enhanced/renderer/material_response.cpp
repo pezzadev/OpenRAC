@@ -48,6 +48,9 @@ ReflectionMaterialSettings reflection_response(
     } else if (family == "foliage") {
         result.roughness = .65f;
         result.reflectivity = .04f;
+    } else if (!source.identity.metal) {
+        result.roughness = .5f;
+        result.reflectivity = .04f;
     }
     auto& reflection = result;
     reflection.roughness = number(properties, "surface.roughness", reflection.roughness);
@@ -79,10 +82,18 @@ MaterialResponse material_response(
     result.glass.transmission = number(properties, "glass.transmission", result.glass.transmission);
     result.glass.tint = materials::colour_value(properties, "glass.tint", result.glass.tint);
     const auto reflection = properties.lower_bound("reflection.");
-    result.reflection_override =
-        result.family_override || properties.contains("surface.roughness")
-        || properties.contains("surface.reflectivity")
-        || (reflection != properties.end() && reflection->first.starts_with("reflection."));
+    const bool optical_override = properties.contains("surface.roughness")
+                                  || properties.contains("surface.reflectivity")
+                                  || (reflection != properties.end()
+                                      && reflection->first.starts_with("reflection."));
+    result.reflection_override = result.family_override || optical_override;
+    const auto family = materials::text_value(properties, "shading");
+    result.conductor = source.identity.metal
+                       && (family == "chrome"
+                           || (family.empty() && source.identity.material_name == "metal_chrome"));
+    result.dielectric_specular = !source.identity.metal
+                                 && (family.empty() || family == "standard")
+                                 && optical_override;
     result.fur = fur_response(properties);
     const auto fur = properties.lower_bound("fur.");
     result.fur_override = fur != properties.end() && fur->first.starts_with("fur.");

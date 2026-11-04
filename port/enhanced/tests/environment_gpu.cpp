@@ -323,6 +323,24 @@ void main() {
     CHECK(std::abs(float(fixture.pixels[1]) - display(direct)) < 2);
     CHECK(fixture.pixels[2] == 0);
     CHECK(std::abs(int(fixture.pixels[3]) - 77) <= 1);
+
+    // The enhanced conductor uses packet coverage and coloured F0 even when the retail
+    // sphere map has no alpha. Classic rendering still honours that map.
+    const std::array<std::uint8_t, 4> clear_green{0, 255, 0, 0};
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, original);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, clear_green.data());
+    glUniform1i(chrome.uniform("object_conductor"), 1);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glReadPixels(0, 0, kWidth, kWidth, GL_RGBA, GL_UNSIGNED_BYTE, fixture.pixels.data());
+    CHECK(std::abs(float(fixture.pixels[0]) - display(direct * .5f)) < 2);
+    CHECK(std::abs(float(fixture.pixels[1]) - display(direct)) < 2);
+    CHECK(fixture.pixels[2] == 0);
+    CHECK(std::abs(int(fixture.pixels[3]) - 77) <= 1);
+    glUniform1i(chrome.uniform("probe_mode"), 0);
+    glUniform1i(chrome.uniform("object_reflection_enabled"), 0);
+    CHECK(draw_chrome(false, 1, 2) == legacy);
+    CHECK(fixture.pixels[3] == 0);
     probes.release();
     glDeleteTextures(1, &original);
     reference_selection.release();

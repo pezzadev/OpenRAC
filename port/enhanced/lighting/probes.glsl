@@ -682,6 +682,35 @@ float sun_shadow_visibility(vec3 p, vec3 n, vec3 plane_normal) {
     return mix(visibility, next, blend);
 }
 
+#ifdef OPENRAC_SHADING_BRDF
+vec3 surface_specular_direct(vec3 p,vec3 n,vec3 eye,vec4 selector,float visibility,
+                             float roughness,vec3 f0) {
+    int a=(int(selector.x+.5)&15)*4,b=(int(selector.y+.5)&15)*4;
+    float blend=clamp(selector.z,0.,1.);
+    vec3 result=vec3(0);
+    for(int light=0;light<2;++light) {
+        int offset=light*2;
+        vec3 radiance=max(mix(light_sets[a+offset].rgb,light_sets[b+offset].rgb,blend),vec3(0));
+        vec3 travel=probe_unit(mix(light_sets[a+offset+1].xyz,light_sets[b+offset+1].xyz,blend));
+        if(light==0) {
+            if(probe_sunlight_direction.w!=0.) travel=probe_sunlight_direction.xyz;
+            radiance*=probe_sunlight_scale;
+        }
+        result+=radiance*mix(.1,1.,visibility)*ggx_specular(n,eye,-travel,
+                    roughness,f0);
+    }
+    LOCAL_LIGHT_LOOP(i) {
+        vec3 delta=LOCAL_POSITION(i).xyz-p;
+        float radius=LOCAL_POSITION(i).w,distance=length(delta);
+        if(radius<=0. || distance>=radius || distance<1e-6) continue;
+        vec3 radiance=max(LOCAL_COLOUR(i).rgb,vec3(0))*LOCAL_ATTENUATION(distance,radius)*LOCAL_CONE(i,delta/distance);
+        result+=radiance*ggx_specular(n,eye,delta/distance,
+                    roughness,f0);
+    }
+    return result;
+}
+#endif
+
 vec3 probe_direct(vec3 p, vec3 n, vec4 selector, float visibility) {
     int a = (int(selector.x + 0.5) & 15) * 4;
     int b = (int(selector.y + 0.5) & 15) * 4;
