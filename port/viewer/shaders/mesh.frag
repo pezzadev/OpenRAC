@@ -194,6 +194,7 @@ vec3 retail_ambient_floor(vec3 indirect, vec3 ambient) {
 
 vec3 dielectric_surface(vec3 diffuse, vec3 indirect, vec3 n, vec3 toward_camera,
                         vec4 selector, float visibility) {
+#ifndef OPENRAC_SOLID
     if (probe_mode != 1 || translucent_pass != 0 || effect_pass != 0
         || material_dielectric.x <= 0. || material_dielectric.z <= 0.) {
         return diffuse;
@@ -207,6 +208,9 @@ vec3 dielectric_surface(vec3 diffuse, vec3 indirect, vec3 n, vec3 toward_camera,
         + surface_specular_direct(v_world_position, n, eye, selector, visibility, roughness, vec3(f0));
     return diffuse * (1. - dielectric_fresnel(nv, f0))
         + specular * material_dielectric_tint * material_dielectric.z;
+#else
+    return diffuse;
+#endif
 }
 
 vec3 probe_surface(vec4 texel, vec3 original) {
