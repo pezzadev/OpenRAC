@@ -28,6 +28,7 @@
 #include "enhanced/tools/baker/probe_device.h"
 #include "enhanced/tools/baker/sources/activation.h"
 #include "enhanced/tools/baker/sources/emission_prepare.h"
+#include "enhanced/tools/baker/sources/emission_review.h"
 #include "enhanced/tools/baker/sources/interior_prepare.h"
 #include "enhanced/tools/baker/sources/interior_sources.h"
 #include "enhanced/tools/baker/sources/interior_stage.h"
@@ -72,6 +73,7 @@ float real(const std::string& text) {
 void usage() {
     std::cout
         << "Offline enhanced lighting bake (no game window)\n"
+        << "openrac-enhanced-baker --inspect-emissive-task LEVELS_DIR REVIEW_JSON TASK_ID\n"
         << "openrac-enhanced-baker --bake-all --levels-dir DIR --output-dir DIR [--update]\n"
         << "  --jobs N --memory-mib N\n"
         << "  --compression auto|none|bc6h|astc (colour: default auto; ASTC colour requires HDR "
@@ -212,6 +214,14 @@ void water_command(int argc, char** argv) {
 int main(int argc, char** argv) {
     try {
         profiling::thread_name("Enhanced bake");
+
+        if (argc > 1 && std::string_view(argv[1]) == "--inspect-emissive-task") {
+            if (argc != 5) {
+                throw std::runtime_error("--inspect-emissive-task requires LEVELS_DIR REVIEW_JSON TASK_ID");
+            }
+            inspect_emissive_task(argv[2], argv[3], argv[4], std::cout);
+            return 0;
+        }
 
         // One native process admits multiple levels while Python supplies preparation and plans.
         if (argc == 2 && std::string_view(argv[1]) == "--coordinate-levels") {

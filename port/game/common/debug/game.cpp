@@ -12,12 +12,14 @@
 
 #include "common/stats.h"
 #include "debug/overlay.h"
+
+#include <cmath>
 #include "openrac/game_host.h"
 #include "openrac/guest.h"
 
 namespace openrac::frontend::debug_overlay {
 
-void game_section() {
+void game_section(const Shown& shown) {
     const std::string level = openrac_game_has_level(s.level)
                                   ? std::format("{} {}", s.level, openrac_game_level_name(s.level))
                                   : std::string("none (the boot program: title, menus)");
@@ -50,20 +52,26 @@ void game_section() {
     }
 
     const host::GameState& g = s.state;
+    const auto* freecam = shown.freecam ? shown.camera : nullptr;
+    const auto position = freecam ? freecam->position : g.camera_position;
+    const auto forward = freecam ? camera_forward(*freecam) : g.forward;
+    const float fov_x = freecam ? 1.0f / std::abs(freecam->projection[0]) : g.tan_half_fov_x;
+    const float fov_y = freecam ? 1.0f / std::abs(freecam->projection[5]) : g.tan_half_fov_y;
     text(
-        "camera {:.2f} {:.2f} {:.2f}",
-        g.camera_position[0],
-        g.camera_position[1],
-        g.camera_position[2]
+        "{} {:.2f} {:.2f} {:.2f}",
+        freecam ? "freecam" : "camera", position[0], position[1], position[2]
     );
     text(
         "  forward {:.3f} {:.3f} {:.3f}   tan fov {:.3f} x {:.3f}",
-        g.forward[0],
-        g.forward[1],
-        g.forward[2],
-        g.tan_half_fov_x,
-        g.tan_half_fov_y
+        forward[0], forward[1], forward[2], fov_x, fov_y
     );
+    if (freecam && ImGui::Button("Copy freecam JSON")) {
+        const auto json = std::format(
+            "{{\"position\":[{},{},{}],\"forward\":[{},{},{}]}}",
+            position[0], position[1], position[2], forward[0], forward[1], forward[2]
+        );
+        ImGui::SetClipboardText(json.c_str());
+    }
     text(
         "  fog {:.0f} {:.0f} {:.0f} from {:.0f} to {:.0f}",
         g.fog_colour[0] * 255.0f,

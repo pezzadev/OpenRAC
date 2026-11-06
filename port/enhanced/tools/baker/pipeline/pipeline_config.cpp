@@ -249,7 +249,7 @@ std::vector<Level> discover(const Options& options) {
 
 json::Value region_settings(const std::filesystem::path& level) {
     const auto defaults = parsed(
-        R"({"enabled":true,"interior_lighting":true,"coarse_bounds":"local_regions","coarse_padding":128,"padding":8,"vertical_padding":4,"max_probes":4096,"max_regions":1024,"no_geometry_coverage":false,"geometry_max_rise":32,"geometry_padding":3,"no_moby_seeds":false,"adaptive_density":false,"adaptive_relative_error":0.1,"adaptive_absolute_error":0.02})"
+        R"({"enabled":true,"interior_lighting":true,"coarse_bounds":"local_regions","coarse_padding":128,"padding":8,"vertical_padding":4,"max_probes":4096,"max_regions":1024,"no_geometry_coverage":false,"geometry_max_rise":32,"geometry_padding":3,"no_moby_seeds":false,"adaptive_density":false,"adaptive_relative_error":0.1,"adaptive_absolute_error":0.02,"authored":[]})"
     );
     auto settings = defaults.members();
     const auto path = level / "probe-bake.json";

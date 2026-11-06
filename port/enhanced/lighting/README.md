@@ -213,6 +213,24 @@ scripts, per-level region/bake settings and emission/interior sidecars, so chang
 layouts even when the native baker executable has not changed.
 `seed_regions.py` can inspect or replace regions for an existing sparse bake, saving the previous list.
 
+Use `regions.authored` for local volumes outside the automatic floor graph, such as a
+swingshot path or a tall arena. Each entry takes `bounds` as world-space minimum XYZ then
+maximum XYZ, and `spacing` as a scalar or XYZ. Authored volumes are added to automatic
+coverage and count towards the same region and per-volume probe budgets.
+
+The optional top-level `look_regions` list scales Enhanced diffuse lighting within world-space
+boxes. Each box takes `bounds`, a `feather` in world units and a `diffuse_gain`. A gain of
+zero can fade a shaft into darkness. Material emission is evaluated separately.
+
+Use Classic captures as visual references only. Fix Enhanced lighting through probe placement,
+baked light sources and, where appropriate, emissive materials. Do not blend Classic diffuse
+lighting into Enhanced to match a reference. Review the resulting Enhanced bake from the
+same camera and check adjacent surfaces for spill and leaks.
+
+For authored fill, `area_lights` takes bake-only rectangles with a world-space `position`,
+perpendicular half-edges `axis_u` and `axis_v`, and linear RGB `radiance`. The cross product
+of the half-edges points toward the lit side. Geometry occludes these lights during the bake.
+
 ## Formats and compatibility
 
 Only **file format 5, bake revision 5** is supported. Rebake older data.

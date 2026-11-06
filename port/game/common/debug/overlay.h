@@ -60,6 +60,12 @@ constexpr std::array<const char*, kSectionCount> kSectionNames =
 
 // Developer menu and renderer-panel controls share the same opt-in camera settings.
 void camera_tools_controls();
+void place_review_camera(int level, scene::Vec3 position, scene::Vec3 forward);
+void meat_proxy_review_window(const Shown& shown);
+
+inline renderer::Vec3 camera_forward(const renderer::Camera& camera) {
+    return {-camera.view[2], -camera.view[6], -camera.view[10]};
+}
 
 // The pad's buttons by bit (active low in the report).
 constexpr std::array<const char*, 16> kButtonNames =
@@ -232,6 +238,7 @@ struct State {
     int material_slot = -1;              // Pending click-picker material.
     std::string material_error;          // Persistent edit/save diagnostics.
     bool enhanced_settings = false;  // Independent Enhanced Settings window.
+    bool meat_proxy_review = false;
     ControlsMenu controls;           // the menu's Controls tab
     bool inspector = false;      // the moby inspector window is open
     bool labels = false;         // the mobys' classes written in the picture
@@ -422,7 +429,7 @@ void inspector_window();
 
 // Draws the game section: the level, the hero, the camera, the pad, the calls to functions without
 // C, and the probes' switches. Defined in debug/game.cpp.
-void game_section();
+void game_section(const Shown& shown);
 
 // Returns the folder the shaders are read again from: OPENRAC_SHADER_DIR when it is set, otherwise
 // the port folder the build read them from (common/stats.h), empty when none was built in.
@@ -566,6 +573,7 @@ Result<const char*> read_scripted_action(const char*, ScriptedInput&);
 // Delivers due held/drag actions only inside the game, without moving the operating system cursor.
 void refresh_scripted_pointer();
 void run_script(std::uint64_t frame, int held);
+void release_scripted_pointer(const SDL_Event& event);
 // Initial inline actions, or an explicit @file whose append-only actions are polled only in diagnostics.
 void configure_scripted_input(std::string_view text);
 // Inspect the click selection without borrowing game graphics objects or moving its camera.

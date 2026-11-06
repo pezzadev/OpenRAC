@@ -121,6 +121,17 @@ void camera_debug_event(const SDL_Event& event) {
     }
 }
 
+namespace {
+std::optional<CameraDebugPlacement> review_placement;
+std::uint64_t placement_serial = 0;
+}
+
+void place_review_camera(int level, scene::Vec3 position, scene::Vec3 forward) {
+    s.camera_tools.enabled = true;
+    s.camera_tools.mode = CameraDebugMode::FreeLook;
+    review_placement = CameraDebugPlacement{level, position, forward, ++placement_serial};
+}
+
 // Samples the display clock and controls once before the scene handoff.
 CameraDebugFrame camera_debug_frame() {
     CameraDebugFrame result;
@@ -140,6 +151,10 @@ CameraDebugFrame camera_debug_frame() {
     }
     s.camera_pad_chord = chord;
     result.settings = s.camera_tools;
+    if (!result.settings.enabled) {
+        review_placement.reset();
+    }
+    result.placement = review_placement;
     result.reset = std::exchange(s.camera_reset, false);
     // Ordinary player frames do not sample extra input or update a developer camera clock.
     if (!result.settings.enabled && !result.reset) {

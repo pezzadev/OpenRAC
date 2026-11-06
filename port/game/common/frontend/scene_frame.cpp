@@ -368,6 +368,8 @@ void set_camera(SceneFrame& frame) {
     set_view_opened(opened);
     if (has_camera) {
         owner.debug_camera.apply(input, frame.output.camera_debug, scene.level);
+        frame.output.freecam = frame.output.camera_debug.settings.enabled;
+        frame.output.camera_level = scene.level;
     }
     const auto& visibility_camera = input.culling_camera ? *input.culling_camera : input.camera;
     owner.scene.choose_scenery(

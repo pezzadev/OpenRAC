@@ -64,6 +64,38 @@ void test_camera_lifecycle() {
     CHECK(!input.culling_camera);
 }
 
+// A queued view survives until its level renders, then ordinary flight continues from it.
+void test_review_placement() {
+    frontend::DebugCamera tools;
+    frontend::CameraDebugFrame frame;
+    renderer::FrameInput input;
+    frame.settings.enabled = true;
+    frame.placement = frontend::CameraDebugPlacement{2, {20, 30, 40}, {0, 1, 0}, 1};
+    input.camera = camera();
+    tools.apply(input, frame, 1);
+    CHECK(input.camera.position == camera().position);
+    input.camera = camera();
+    tools.apply(input, frame, 2);
+    CHECK(input.camera.position == frame.placement->position);
+    CHECK(std::abs(input.camera.view[6] + 1) < 1e-5f);
+
+    frame.controls.forward = true;
+    frame.seconds = .05f;
+    input.camera = camera();
+    tools.apply(input, frame, 2);
+    CHECK(input.camera.position[1] > 30);
+    const float moved = input.camera.position[1];
+    input.camera = camera();
+    tools.apply(input, frame, 2);
+    CHECK(input.camera.position[1] > moved);
+
+    frame.controls = {};
+    ++frame.placement->serial;
+    input.camera = camera();
+    tools.apply(input, frame, 2);
+    CHECK(input.camera.position == frame.placement->position);
+}
+
 // Inspection tracks a changing game or cutscene pose independently of the freecam.
 void test_live_game_culling() {
     frontend::DebugCamera tools;
@@ -259,6 +291,7 @@ void test_clip_geometry() {
 
 int main() {
     test_camera_lifecycle();
+    test_review_placement();
     test_live_game_culling();
     test_culling_targets();
     test_default_free_look();

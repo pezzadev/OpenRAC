@@ -114,6 +114,21 @@ vec3 surface_emission(vec4 texel) {
         + authored_emission();
 }
 
+uniform int probe_look_count;
+uniform vec4 probe_look[24]; // Twelve boxes: minimum/feather and maximum/diffuse gain.
+
+vec3 apply_probe_look(vec3 diffuse, vec3 emitted) {
+    float gain = 1.0;
+    for (int i = 0; i < probe_look_count; ++i) {
+        vec4 low = probe_look[i * 2];
+        vec4 high = probe_look[i * 2 + 1];
+        vec3 edge = min(v_world_position - low.xyz, high.xyz - v_world_position);
+        float weight = smoothstep(0.0, low.w, min(edge.x, min(edge.y, edge.z)));
+        gain *= mix(1.0, high.w, weight);
+    }
+    return diffuse * gain + emitted;
+}
+
 uniform int object_reflection_enabled;
 uniform vec3 object_reflection_material; // Perceptual roughness, F0, reflection strength.
 uniform vec4 object_reflection_tint; // Linear tint and authored-opacity multiplier.
@@ -365,7 +380,8 @@ vec3 probe_surface(vec4 texel, vec3 original) {
     if (foliage) {
         vec3 colour = foliage_surface(v_world_position, n, toward_camera, albedo, indirect,
             selector, visibility, leaf, v_uv);
-        return probe_display(colour + (probe_mode == 1 && foliage_debug == 0 ? emitted : vec3(0.)));
+        return probe_display(probe_mode == 1 && foliage_debug == 0
+                                 ? apply_probe_look(colour, emitted) : colour);
     }
 #endif
     // Fine fur changes material response; shadow tests, probe lookup bias and cached GI keep smooth normals.
@@ -407,11 +423,9 @@ vec3 probe_surface(vec4 texel, vec3 original) {
     }
 #endif
     // Emission is independent of GI exposure, AO and shadow visibility.
-    return probe_display(
-        wet_coat(albedo * illumination * material_diffuse_scale + rim, surface_n, toward_camera, visibility)
-        + fur_direct + fur_indirect
-        + (probe_mode == 1 ? emitted : vec3(0.0))
-    );
+    vec3 diffuse = wet_coat(albedo * illumination * material_diffuse_scale + rim,
+                            surface_n, toward_camera, visibility) + fur_direct + fur_indirect;
+    return probe_display(probe_mode == 1 ? apply_probe_look(diffuse, emitted) : diffuse);
 }
 
 #else

@@ -299,10 +299,42 @@ json::Value complete_report(const ProbeBatchOptions& options, const json::Value&
 
     validate_metadata(request);
     auto fields = seed_plan(options, request).members();
-    const auto count = fields.at("regions").items().size();
+    auto regions = fields.at("regions").items();
+    if (settings["enabled"].boolean()) {
+        for (const auto& region : settings["authored"].items()) {
+            const auto& bounds = region["bounds"];
+            const auto axes = spacing(region["spacing"]);
+            if (bounds.items().size() != 6) {
+                throw std::runtime_error("authored probe bounds require six coordinates");
+            }
+            double probes = 1;
+            for (std::size_t axis = 0; axis < 3; ++axis) {
+                const auto& lo = bounds[axis];
+                const auto& hi = bounds[axis + 3];
+                if (!lo.is_number() || !hi.is_number() || !std::isfinite(lo.number())
+                    || !std::isfinite(hi.number()) || hi.number() - lo.number() < 2 * axes[axis]) {
+                    throw std::runtime_error("invalid authored probe volume extent");
+                }
+                probes *= std::ceil(hi.number() / axes[axis])
+                          - std::floor(lo.number() / axes[axis]) + 1;
+            }
+            if (probes > settings["max_probes"].number()) {
+                throw std::runtime_error("authored probe volume exceeds the per-region budget");
+            }
+            regions.push_back(region);
+        }
+    }
+    std::string region_json = "[";
+    for (const auto& region : regions) {
+        if (region_json.size() > 1) {
+            region_json += ',';
+        }
+        region_json += bake_json::json_text(region);
+    }
+    fields["regions"] = parsed(region_json + ']');
 
     // Runtime capacity and the configured level cap both bound final allocations.
-    if (count > coordinator_integer(settings["max_regions"], 1024)) {
+    if (regions.size() > coordinator_integer(settings["max_regions"], 1024)) {
         throw std::runtime_error("planned dense regions exceed the runtime region limit");
     }
 

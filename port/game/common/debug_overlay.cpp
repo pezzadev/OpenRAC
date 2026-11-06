@@ -93,8 +93,8 @@ void configure() {
     // one), "inspect" selects the hero and opens the inspector, "labels" names the mobys in view,
     // "memview" opens the memory viewer.
     if (const std::optional<std::string_view> v = env::value(env::Var::Overlay); v && *v != "0") {
-        s.wanted = true;
         const std::string list(*v);
+        s.wanted = list != "meat-proxy-review";
         const auto has = [&](const char* word) {
             std::size_t at = 0;
             const std::size_t n = std::strlen(word);
@@ -119,6 +119,7 @@ void configure() {
         }
         s.labels = has("labels");
         s.object_viewer.open = s.developer && has("object-viewer");
+        s.meat_proxy_review = s.developer && has("meat-proxy-review");
         set_picker_enabled(has("picker") || s.object_viewer.open);
         s.wireframe = has("wireframe");
         s.memory_viewer = has("memview");
@@ -554,7 +555,7 @@ void panel(const Shown& shown) {
             mobys_section();
         }
         if (header(kGame, "Game")) {
-            game_section();
+            game_section(shown);
         }
         if (header(kShaders, "Shaders")) {
             shaders_section();
@@ -650,16 +651,17 @@ void toggle_drawer() {
 }
 
 bool visible() {
-    return s.visible || s.enhanced_settings;
+    return s.visible || s.enhanced_settings || s.meat_proxy_review;
 }
 
 bool wants_cursor() {
-    return s.menu_open || s.menu_at > 0.0f || s.visible || s.enhanced_settings
+    return s.menu_open || s.menu_at > 0.0f || visible()
            || s.object_viewer.open || picker_enabled() || s.touch_editing;
 }
 
 bool event(const SDL_Event& e) {
     configure();
+    release_scripted_pointer(e);
     // A press awaited for a binding (the Controls tab): the controllers' presses are the
     // capture's, not the menu's. The keyboard does nothing either (no menu key, no Enter on
     // another row, no Android Back, which a controller's B may be), but Esc gives the capture up. Key releases still reach the menu, so a key
@@ -809,7 +811,7 @@ bool event(const SDL_Event& e) {
                 break;
         }
     }
-    if (!(s.visible || s.enhanced_settings || s.object_viewer.open || picker_enabled()
+    if (!(visible() || s.object_viewer.open || picker_enabled()
           || s.menu_open)
         || !s.initialised) {
         return false;
@@ -839,7 +841,8 @@ bool event(const SDL_Event& e) {
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
         case SDL_EVENT_TEXT_INPUT:
-            return io.WantTextInput || (s.object_viewer.open && io.WantCaptureKeyboard);
+            return io.WantTextInput
+                   || ((s.object_viewer.open || s.meat_proxy_review) && io.WantCaptureKeyboard);
         default:
             return false;
     }
@@ -944,7 +947,7 @@ void draw(const Shown& shown) {
     const bool badge = s.paused || s.stretch != 1.0 || notifications_pending() || capture_busy()
                        || !mods::play_notice().empty();
     const bool menu_out = s.menu_open || s.menu_at > 0.0f || s.shot_when_shut || s.touch_editing;
-    if (!(s.visible || s.enhanced_settings || picker_enabled() || badge || menu_out
+    if (!(visible() || picker_enabled() || badge || menu_out
           || !s.shot_path.empty())
         || shown.window == nullptr || !initialise(shown.window)) {
         s.drew_last_frame = false;
@@ -990,6 +993,7 @@ void draw(const Shown& shown) {
     refresh_scripted_pointer();
     ImGui::NewFrame();
     enhanced_settings_window();
+    meat_proxy_review_window(shown);
     material_settings_window();
     controls_frame();
     if (s.visible) {

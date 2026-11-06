@@ -465,7 +465,9 @@ void draw_overlay(const FramePresentation& output) {
          output.picker_palette,
          output.picker_level,
          output.tick,
-         output.picker_layers}
+         output.picker_layers,
+         output.freecam,
+         output.camera_level}
     );
 }
 
