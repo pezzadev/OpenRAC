@@ -8,6 +8,11 @@ driver on Android. It is not a general OpenGL implementation: a GL call the rend
 not here, and a new renderer feature has to be expressible in that list. How GL's model becomes
 Vulkan's is the comment at the top of [vkgl.h](vkgl.h).
 
+On macOS and iOS the launcher labels this renderer **Metal**. The application loads its
+bundled MoltenVK. The legacy `OPENRAC_GL_API=metal` setting follows the same path.
+The macOS build keeps its OpenGL fallback. [remote-mac.sh](../../tools/remote-mac.sh)
+checks the bundled loader and records the renderer and output on a target Mac.
+
 ## Interface
 
 - [vkgl.h](vkgl.h): `openrac::vkgl`, the backend as the window and the frontend see it: `open` and
@@ -30,7 +35,7 @@ The public entry points and shared backend declarations remain beside this READM
 | File | What it holds |
 |---|---|
 | [graph/graph_execution.cpp](graph/graph_execution.cpp), [graph/graph_imports.cpp](graph/graph_imports.cpp) | Ordered plan execution and canonical allocation imports |
-| [graph/graph_immediate_work.cpp](graph/graph_immediate_work.cpp), [graph/graph_image_work.cpp](graph/graph_image_work.cpp) | Compatibility draws, dispatches, clears and transfers captured as declared graph work |
+| [graph/graph_immediate_work.cpp](graph/graph_immediate_work.cpp), [graph/graph_image_work.cpp](graph/graph_image_work.cpp) | Native buffer and image transfers, mip generation and attachment clears declared before recording |
 | [graph/graph_pipeline.cpp](graph/graph_pipeline.cpp) | Active pass contracts, binding validation and pipeline command lowering |
 | [graph/graph_state_translation.cpp](graph/graph_state_translation.cpp) | Context-independent stage, access and barrier translation shared by frame rendering and the baker |
 | [graph/graph_states.cpp](graph/graph_states.cpp), [graph/graph_buffer_execution.cpp](graph/graph_buffer_execution.cpp) | Frame-owned transitions and buffer-only plans on independent devices |
@@ -309,7 +314,9 @@ Vulkan uses graph dependency planning for temporal recording.
 Temporal composition joins compatible temporal phases in a shared plan. Native SDK
 dispatches flush the pending section before returning their success or failure;
 fallback copies, blur and colour grading can then form the next section. SDK-private
-histories and barriers remain opaque. Late overlays, HUD and acquired-image
+histories and barriers remain opaque. FSR declares compute access. ASR declares both
+fragment and compute sampling, with a native output that can be written by either pipeline.
+Late overlays, HUD and acquired-image
 presentation retain their existing boundaries.
 
 `PreparedRaster` retains each pass's loose uniforms, sampler/block bindings and
@@ -348,10 +355,18 @@ GL-shaped blits, so graph transitions do not duplicate native barriers.
 Sources, destinations, extents and sample conversions
 validate before the shared section executes.
 
+Texture uploads declare the affected subresource before copying. Standalone compute-to-texture
+copies declare the source bytes and export the destination for sampling. Readback transfers
+export the staging range for host access before the caller waits and maps it. Copies to
+mod-owned images preserve the mod's layout at the external boundary.
+
 The sky scope joins shadows, atmosphere transport and sky composition. Late shadows
 join the surface scope, followed by the first contiguous opaque/cutout world batch.
-Explicit early-cache reads connect that batch to its compute producer; per-material
-descriptor reads remain local to drawing. Blended work retains the original batch boundaries.
+Explicit early-cache reads connect that batch to its compute producer. Bindless descriptors
+require a declared sampled image and mip range. Immediate draws capture their bound materials
+with their other inputs. Ordered world draws can declare late selections in a nested export,
+and reuse the read within the current raster scope. An export without a barrier keeps pending
+indirect draws batched. Blended work retains the original batch boundaries.
 Deferred callbacks borrow frame/provider
 state only until their enclosing call returns. Native bind caches are invalidated
 when restoring raster state. Failed preparation or compilation returns an error to the existing frame

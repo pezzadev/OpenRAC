@@ -1699,6 +1699,7 @@ void views_reach_the_host(const fs::path& plugins) {
     // A frame as the frontend draws it: begin, then end once it is submitted, then the closing.
     openrac_view views[OPENRAC_VIEW_MAX] = {};
     CHECK(g_views->begin(g_views->user, views, OPENRAC_VIEW_MAX) == 1);
+    CHECK(mods::vulkan_needs_game_thread());
     CHECK(views[0].width == 64 && views[0].height == 48 && views[0].kind == OPENRAC_VIEW_FULL);
     g_views->end(g_views->user, views, 1);
     g_views->closing(g_views->user);
@@ -1707,11 +1708,11 @@ void views_reach_the_host(const fs::path& plugins) {
     CHECK(g_views == nullptr && g_vulkan == nullptr);
 
     // Without "vulkan_device" the mods load after the window, as always; with it, before.
-    CHECK(!mods::makes_vulkan_device(plugins / "plugins.json", false));
+    CHECK(!mods::loads_before_window(plugins / "plugins.json", false));
     install(plugins, "a", OPENRAC_TEST_MOD_A, "1.19", R"( "vulkan_device": true,)");
-    CHECK(mods::makes_vulkan_device(plugins / "plugins.json", false));
-    CHECK(!mods::makes_vulkan_device(plugins / "plugins.json", true));  // purist: none
-    CHECK(!mods::makes_vulkan_device(plugins / "nowhere.json", false));
+    CHECK(mods::loads_before_window(plugins / "plugins.json", false));
+    CHECK(!mods::loads_before_window(plugins / "plugins.json", true));  // purist: none
+    CHECK(!mods::loads_before_window(plugins / "nowhere.json", false));
     install(plugins, "a", OPENRAC_TEST_MOD_A);
 }
 
@@ -1738,7 +1739,7 @@ void native_vulkan_access_requires_a_declaration(const fs::path& plugins) {
             std::format("{}.{}", OPENRAC_MOD_API_MAJOR, OPENRAC_MOD_API_MINOR),
             declared ? R"("vulkan_queue": true,)" : ""
         );
-        CHECK(!mods::makes_vulkan_device(list, false));
+        CHECK(mods::loads_before_window(list, false) == declared);
         g_records.clear();
         CHECK(mods::load(h) == "test-current 1.0.0");
         CHECK(mods::vulkan_needs_game_thread() == declared);

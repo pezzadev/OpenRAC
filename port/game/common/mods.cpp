@@ -2480,7 +2480,7 @@ std::string load(const Host& host) {
     return line;
 }
 
-bool makes_vulkan_device(const fs::path& list_path, bool purist) {
+bool loads_before_window(const fs::path& list_path, bool purist) {
     std::string text;
     std::vector<ListEntry> list;
     std::string error;
@@ -2492,7 +2492,8 @@ bool makes_vulkan_device(const fs::path& list_path, bool purist) {
         std::string manifest_text;
         Manifest manifest;
         if (e.enabled && read_text(folder / e.id / "openrac-mod.json", manifest_text)
-            && parse_manifest(manifest_text, manifest, error) && manifest.vulkan_device) {
+            && parse_manifest(manifest_text, manifest, error)
+            && (manifest.vulkan_device || manifest.vulkan_queue)) {
             return true;
         }
     }
@@ -2500,7 +2501,8 @@ bool makes_vulkan_device(const fs::path& list_path, bool purist) {
 }
 
 bool vulkan_needs_game_thread() {
-    return g_vulkan_queue_declared;
+    return g_vulkan_queue_declared
+           || (g_views_mod != nullptr && g_views_mod->manifest.api_minor < 20);
 }
 
 bool view_source_can_use_vulkan() {

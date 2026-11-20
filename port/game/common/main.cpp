@@ -796,9 +796,9 @@ int main(int argc, char** argv) {
             renderer::texture_pack::preload();
         }
         fs::path levels = g_options.levels.empty() ? default_levels(g_options.data) : levels_or_flat(g_options.levels);
-        // A mod that makes the Vulkan device with the port (a VR headset's) is loaded before the
-        // window, which makes the device; without one the mods load after it, as always.
-        if (mods::makes_vulkan_device(g_options.plugins, g_options.no_mods)) {
+        // Mods that make the Vulkan device or declare native Vulkan access load before the window
+        // so device setup and the queue thread are chosen before any Vulkan work begins.
+        if (mods::loads_before_window(g_options.plugins, g_options.no_mods)) {
             openrac_game_register_functions();
             load_mods();
             mods_loaded = true;
